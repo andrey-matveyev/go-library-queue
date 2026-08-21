@@ -6,30 +6,23 @@ import (
 	"sync"
 )
 
-
-type Queue struct {
+// Queue представляет собой универсальную потокобезопасную очередь для элементов любого типа T.
+type Queue[T any] struct {
 	mtx        sync.Mutex
 	innerChan  chan struct{}
 	queueTasks *list.List
 }
 
-
-
-
-func NewQueue() *Queue {
-	item := &Queue{
-		innerChan: make(chan struct{}, 1),
+// NewQueue создает новую очередь для элементов типа T.
+func NewQueue[T any]() *Queue[T] {
+	return &Queue[T]{
+		innerChan:  make(chan struct{}, 1),
+		queueTasks: list.New(),
 	}
-	item.queueTasks = list.New()
-
-	return item
 }
 
-
-
-
-
-func (q *Queue) Push(task *Task) {
+// Push добавляет элемент в очередь и нотифицирует читателей.
+func (q *Queue[T]) Push(task T) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	q.queueTasks.PushBack(task)
@@ -39,71 +32,65 @@ func (q *Queue) Push(task *Task) {
 	}
 }
 
-
-
-
-func (q *Queue) Pop() *Task {
+// Pop извлекает элемент из очереди. Возвращает нулевое значение T и false, если очередь пуста.
+func (q *Queue[T]) Pop() (T, bool) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
-
 	if q.queueTasks.Len() == 0 {
-		return nil
+		var zero T
+		return zero, false
 	}
-
 
 	elem := q.queueTasks.Front()
 	q.queueTasks.Remove(elem)
-	return elem.Value.(*Task)
-}
 
-
-
-func InpQueue(inp chan *Task) *Queue {
-	queue := NewQueue()
-	go inpProcess(inp, queue)
-	return queue
-}
-
-
-func inpProcess(inp chan *Task, q *Queue) {
-	for value := range inp {
-
-
-		q.Push(value)
-		select {
-
-		case q.innerChan <- struct{}{}:
-		default:
-		}
+	val, ok := elem.Value.(T)
+	if !ok {
+		var zero T
+		return zero, false
 	}
+	return val, true
+}
 
+// Len возвращает текущее количество элементов в очереди потокобезопасно.
+func (q *Queue[T]) Len() int {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+	return q.queueTasks.Len()
+}
+
+// InpQueue запускает горутину, читающую из входного канала типа T и складывающую в очередь.
+func InpQueue[T any](inp chan T) *Queue[T] {
+	q := NewQueue[T]()
+	go inpProcess(inp, q)
+	return q
+}
+
+func inpProcess[T any](inp chan T, q *Queue[T]) {
+	for value := range inp {
+		q.Push(value)
+	}
 	close(q.innerChan)
 }
 
-
-func OutQueue(ctx context.Context, q *Queue) chan *Task {
-	out := make(chan *Task)
-
+// OutQueue запускает горутину, читающую из очереди и отправляющую в выходной канал типа T.
+func OutQueue[T any](ctx context.Context, q *Queue[T]) chan T {
+	out := make(chan T)
 	go outProcess(ctx, q, out)
 	return out
 }
 
-
-func outProcess(ctx context.Context, q *Queue, out chan *Task) {
+func outProcess[T any](ctx context.Context, q *Queue[T], out chan T) {
 	defer close(out)
 	for {
 		select {
-
-
-
-					case <-ctx.Done():
-						return
+		case <-ctx.Done():
+			return
 		case _, ok := <-q.innerChan:
 			for {
-
-				task := q.Pop()
-				if task != nil {
+				task, found := q.Pop()
+				if found {
 					select {
 					case out <- task:
 					case <-ctx.Done():
@@ -111,18 +98,11 @@ func outProcess(ctx context.Context, q *Queue, out chan *Task) {
 					}
 				} else {
 					break
-
-			}
+				}
 			}
 			if !ok {
 				return
-
+			}
 		}
 	}
-}
-}
-
-type Task struct {
-	ID   int
-	Data string
 }
