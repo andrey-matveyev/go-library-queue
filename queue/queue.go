@@ -3,78 +3,136 @@ package queue
 import (
 	"container/list"
 	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
 )
 
-// Queue представляет собой универсальную потокобезопасную очередь для элементов любого типа T.
+var (
+	// ErrQueueClosed is returned when an operation is attempted on a closed queue.
+	ErrQueueClosed = errors.New("queue is closed")
+)
+
+// Queue represents a thread-safe generic queue for items of any type T.
 type Queue[T any] struct {
-	mtx        sync.Mutex
-	innerChan  chan struct{}
-	queueTasks *list.List
+	mtx       sync.Mutex
+	innerChan chan struct{}
+	tasks     *list.List
+	closed    bool
+	logger    *slog.Logger
 }
 
-// NewQueue создает новую очередь для элементов типа T.
-func NewQueue[T any]() *Queue[T] {
-	return &Queue[T]{
-		innerChan:  make(chan struct{}, 1),
-		queueTasks: list.New(),
+// Option allows configuring the Queue with functional options.
+type Option func(*options)
+
+type options struct {
+	logger *slog.Logger
+}
+
+// WithLogger sets a custom slog.Logger for the queue.
+func WithLogger(logger *slog.Logger) Option {
+	return func(o *options) {
+		o.logger = logger
 	}
 }
 
-// Push добавляет элемент в очередь и нотифицирует читателей.
-func (q *Queue[T]) Push(task T) {
+// NewQueue creates a new generic queue with optional configuration.
+func NewQueue[T any](opts ...Option) *Queue[T] {
+	opt := options{
+		logger: slog.Default(),
+	}
+	for _, o := range opts {
+		o(&opt)
+	}
+
+	return &Queue[T]{
+		innerChan: make(chan struct{}, 1),
+		tasks:     list.New(),
+		logger:    opt.logger,
+	}
+}
+
+// Push adds an item to the queue and notifies consumers.
+// Returns ErrQueueClosed if the queue has been closed.
+func (q *Queue[T]) Push(item T) error {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
-	q.queueTasks.PushBack(task)
+
+	if q.closed {
+		q.logger.Warn("attempted to push to a closed queue")
+		return ErrQueueClosed
+	}
+
+	q.tasks.PushBack(item)
 	select {
 	case q.innerChan <- struct{}{}:
 	default:
 	}
+	return nil
 }
 
-// Pop извлекает элемент из очереди. Возвращает нулевое значение T и false, если очередь пуста.
+// Pop retrieves and removes an item from the queue.
+// Returns the item, true if successful, or zero value of T and false if empty.
 func (q *Queue[T]) Pop() (T, bool) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
-	if q.queueTasks.Len() == 0 {
+	if q.tasks.Len() == 0 {
 		var zero T
 		return zero, false
 	}
 
-	elem := q.queueTasks.Front()
-	q.queueTasks.Remove(elem)
+	elem := q.tasks.Front()
+	q.tasks.Remove(elem)
 
 	val, ok := elem.Value.(T)
 	if !ok {
 		var zero T
+		q.logger.Error("failed to type assert value from queue list", slog.String("type", fmtTypeName[T]()))
 		return zero, false
 	}
 	return val, true
 }
 
-// Len возвращает текущее количество элементов в очереди потокобезопасно.
+// Len returns the current number of items in the queue safely.
 func (q *Queue[T]) Len() int {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
-	return q.queueTasks.Len()
+	return q.tasks.Len()
 }
 
-// InpQueue запускает горутину, читающую из входного канала типа T и складывающую в очередь.
-func InpQueue[T any](inp chan T) *Queue[T] {
-	q := NewQueue[T]()
+// Close gracefully closes the queue, preventing further pushes.
+func (q *Queue[T]) Close() {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	if q.closed {
+		return
+	}
+	q.closed = true
+	close(q.innerChan)
+	q.logger.Debug("queue closed")
+}
+
+// InpQueue starts a background goroutine that reads from the input channel of type T and pushes to the Queue.
+func InpQueue[T any](inp chan T, opts ...Option) *Queue[T] {
+	q := NewQueue[T](opts...)
 	go inpProcess(inp, q)
 	return q
 }
 
 func inpProcess[T any](inp chan T, q *Queue[T]) {
+	defer q.Close()
 	for value := range inp {
-		q.Push(value)
+		if err := q.Push(value); err != nil {
+			q.logger.Error("failed to push item from input channel", slog.Any("error", err))
+			break
+		}
 	}
-	close(q.innerChan)
 }
 
-// OutQueue запускает горутину, читающую из очереди и отправляющую в выходной канал типа T.
+// OutQueue starts a background goroutine that reads from the Queue and sends items to the output channel of type T.
 func OutQueue[T any](ctx context.Context, q *Queue[T]) chan T {
 	out := make(chan T)
 	go outProcess(ctx, q, out)
@@ -86,14 +144,16 @@ func outProcess[T any](ctx context.Context, q *Queue[T], out chan T) {
 	for {
 		select {
 		case <-ctx.Done():
+			q.logger.Debug("outProcess cancelled by context")
 			return
 		case _, ok := <-q.innerChan:
 			for {
-				task, found := q.Pop()
+				item, found := q.Pop()
 				if found {
 					select {
-					case out <- task:
+					case out <- item:
 					case <-ctx.Done():
+						q.logger.Debug("outProcess cancelled while sending item")
 						return
 					}
 				} else {
@@ -101,8 +161,14 @@ func outProcess[T any](ctx context.Context, q *Queue[T], out chan T) {
 				}
 			}
 			if !ok {
+				q.logger.Debug("innerChan closed, outProcess terminating")
 				return
 			}
 		}
 	}
+}
+
+func fmtTypeName[T any]() string {
+	var zero T
+	return fmt.Sprintf("%T", zero)
 }

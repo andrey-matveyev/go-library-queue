@@ -25,11 +25,11 @@ func TestNewQueue(t *testing.T) {
 	if cap(q.innerChan) != 1 {
 		t.Errorf("innerChan capacity was %d, expected 1", cap(q.innerChan))
 	}
-	if q.queueTasks == nil {
-		t.Errorf("queueTasks was not initialized")
+	if q.tasks == nil {
+		t.Errorf("tasks was not initialized")
 	}
 	if q.Len() != 0 {
-		t.Errorf("queueTasks was not empty, expected 0 elements")
+		t.Errorf("tasks was not empty, expected 0 elements")
 	}
 }
 
@@ -42,7 +42,9 @@ func TestQueuePushPop(t *testing.T) {
 		t.Errorf("Pop from empty queue returned %v, %v, expected nil, false", poppedTask, found)
 	}
 
-	q.Push(task1)
+	if err := q.Push(task1); err != nil {
+		t.Errorf("Unexpected error on push: %v", err)
+	}
 	if q.Len() != 1 {
 		t.Errorf("After push, queue length was %d, expected 1", q.Len())
 	}
@@ -71,6 +73,16 @@ func TestQueuePushPop(t *testing.T) {
 	}
 	if q.Len() != 0 {
 		t.Errorf("After all pops, queue length was %d, expected 0", q.Len())
+	}
+}
+
+func TestQueuePushClosed(t *testing.T) {
+	q := NewQueue[*TestTask]()
+	q.Close()
+
+	err := q.Push(&TestTask{ID: 1})
+	if err != ErrQueueClosed {
+		t.Errorf("Expected ErrQueueClosed, got %v", err)
 	}
 }
 
@@ -130,7 +142,7 @@ func TestOutProcessBasicFlow(t *testing.T) {
 		t.Errorf("Expected task2, got %v", r2)
 	}
 
-	close(q.innerChan)
+	q.Close()
 	time.Sleep(50 * time.Millisecond)
 
 	select {
