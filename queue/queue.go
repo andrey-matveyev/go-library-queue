@@ -6,14 +6,14 @@ import (
 	"sync"
 )
 
-type Queue struct {
+type Queue[T any] struct {
 	mtx        sync.Mutex
 	innerChan  chan struct{}
 	queueTasks *list.List
 }
 
-func NewQueue() *Queue {
-	item := &Queue{
+func NewQueue[T any]() *Queue[T] {
+	item := &Queue[T]{
 		innerChan: make(chan struct{}, 1),
 	}
 	item.queueTasks = list.New()
@@ -21,7 +21,7 @@ func NewQueue() *Queue {
 	return item
 }
 
-func (q *Queue) Push(task *Task) {
+func (q *Queue[T]) Push(task T) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	q.queueTasks.PushBack(task)
@@ -31,26 +31,27 @@ func (q *Queue) Push(task *Task) {
 	}
 }
 
-func (q *Queue) Pop() *Task {
+func (q *Queue[T]) Pop() T {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
 	if q.queueTasks.Len() == 0 {
-		return nil
+		var zero T
+		return zero
 	}
 
 	elem := q.queueTasks.Front()
 	q.queueTasks.Remove(elem)
-	return elem.Value.(*Task)
+	return elem.Value.(T)
 }
 
-func InpQueue(inp chan *Task) *Queue {
-	queue := NewQueue()
+func InpQueue[T any](inp chan T) *Queue[T] {
+	queue := NewQueue[T]()
 	go inpProcess(inp, queue)
 	return queue
 }
 
-func inpProcess(inp chan *Task, q *Queue) {
+func inpProcess[T any](inp chan T, q *Queue[T]) {
 	for value := range inp {
 
 		q.Push(value)
@@ -64,14 +65,14 @@ func inpProcess(inp chan *Task, q *Queue) {
 	close(q.innerChan)
 }
 
-func OutQueue(ctx context.Context, q *Queue) chan *Task {
-	out := make(chan *Task)
+func OutQueue[T any](ctx context.Context, q *Queue[T]) chan T {
+	out := make(chan T)
 
 	go outProcess(ctx, q, out)
 	return out
 }
 
-func outProcess(ctx context.Context, q *Queue, out chan *Task) {
+func outProcess[T any](ctx context.Context, q *Queue[T], out chan T) {
 	defer close(out)
 	for {
 		select {
@@ -80,7 +81,8 @@ func outProcess(ctx context.Context, q *Queue, out chan *Task) {
 		case _, ok := <-q.innerChan:
 			for {
 				task := q.Pop()
-				if task != nil {
+				var zero T
+				if any(task) != any(zero) {
 					select {
 					case out <- task:
 					case <-ctx.Done():
@@ -101,3 +103,4 @@ type Task struct {
 	ID   int
 	Data string
 }
+

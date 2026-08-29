@@ -10,7 +10,7 @@ import (
 
 // TestNewQueue verifies that NewQueue initializes the structure correctly.
 func TestNewQueue(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue[*Task]()
 
 	if q == nil {
 		t.Errorf("NewQueue returned nil, expected a pointer to queue")
@@ -31,7 +31,7 @@ func TestNewQueue(t *testing.T) {
 
 // TestQueuePushPop verifies that Push and Pop operations are correct.
 func TestQueuePushPop(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue[*Task]()
 	task1 := &Task{ID: 1, Data: "Task 1"}
 	task2 := &Task{ID: 2, Data: "Task 2"}
 
@@ -109,7 +109,7 @@ func TestInpProcessBasicFlow(t *testing.T) {
 
 // TestOutProcessBasicFlow tests the basic workflow outProcess.
 func TestOutProcessBasicFlow(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue[*Task]()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
