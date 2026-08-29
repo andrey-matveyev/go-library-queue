@@ -37,12 +37,12 @@ func (q *Queue[T]) Pop() (T, bool) {
 
 	if q.queueTasks.Len() == 0 {
 		var zero T
-		return zero, true
+		return zero, false
 	}
 
 	elem := q.queueTasks.Front()
 	q.queueTasks.Remove(elem)
-	return elem.Value.(T), false
+	return elem.Value.(T), true
 }
 
 func InpQueue[T any](inp chan T) *Queue[T] {
