@@ -31,18 +31,18 @@ func (q *Queue[T]) Push(task T) {
 	}
 }
 
-func (q *Queue[T]) Pop() T {
+func (q *Queue[T]) Pop() (T, bool) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
 	if q.queueTasks.Len() == 0 {
 		var zero T
-		return zero
+		return zero, true
 	}
 
 	elem := q.queueTasks.Front()
 	q.queueTasks.Remove(elem)
-	return elem.Value.(T)
+	return elem.Value.(T), false
 }
 
 func InpQueue[T any](inp chan T) *Queue[T] {
@@ -80,9 +80,8 @@ func outProcess[T any](ctx context.Context, q *Queue[T], out chan T) {
 			return
 		case _, ok := <-q.innerChan:
 			for {
-				task := q.Pop()
-				var zero T
-				if any(task) != any(zero) {
+				task, hasTask := q.Pop()
+				if !hasTask {
 					select {
 					case out <- task:
 					case <-ctx.Done():
@@ -103,4 +102,3 @@ type Task struct {
 	ID   int
 	Data string
 }
-
