@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"main/queue"
+	"github.com/andrey-matveyev/go-library-queue/queue"
 	"time"
 )
 

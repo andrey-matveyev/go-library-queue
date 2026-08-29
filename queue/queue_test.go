@@ -8,12 +8,12 @@ import (
 	"time"
 )
 
-// TestNewQueue verifies that newQueue initializes the structure correctly.
+// TestNewQueue verifies that NewQueue initializes the structure correctly.
 func TestNewQueue(t *testing.T) {
-	q := newQueue()
+	q := NewQueue()
 
 	if q == nil {
-		t.Errorf("newQueue returned nil, expected a pointer to queue")
+		t.Errorf("NewQueue returned nil, expected a pointer to queue")
 	}
 	if q.innerChan == nil {
 		t.Errorf("innerChan was not initialized")
@@ -29,25 +29,25 @@ func TestNewQueue(t *testing.T) {
 	}
 }
 
-// TestQueuePushPop verifies that push and pop operations are correct.
+// TestQueuePushPop verifies that Push and Pop operations are correct.
 func TestQueuePushPop(t *testing.T) {
-	q := newQueue()
+	q := NewQueue()
 	task1 := &Task{ID: 1, Data: "Task 1"}
 	task2 := &Task{ID: 2, Data: "Task 2"}
 
 	// Check pop from empty queue
-	if poppedTask := q.pop(); poppedTask != nil {
+	if poppedTask := q.Pop(); poppedTask != nil {
 		t.Errorf("Pop from empty queue returned %v, expected nil", poppedTask)
 	}
 
 	// Push task1
-	q.push(task1)
+	q.Push(task1)
 	if q.queueTasks.Len() != 1 {
 		t.Errorf("After push, queue length was %d, expected 1", q.queueTasks.Len())
 	}
 
 	// Pop task1
-	poppedTask := q.pop()
+	poppedTask := q.Pop()
 	if poppedTask == nil || poppedTask.ID != 1 {
 		t.Errorf("Pop returned %v, expected task1", poppedTask)
 	}
@@ -56,17 +56,17 @@ func TestQueuePushPop(t *testing.T) {
 	}
 
 	// Push task1 and task2, then pop in order
-	q.push(task1)
-	q.push(task2)
+	q.Push(task1)
+	q.Push(task2)
 	if q.queueTasks.Len() != 2 {
 		t.Errorf("After two pushes, queue length was %d, expected 2", q.queueTasks.Len())
 	}
 
-	poppedTask = q.pop()
+	poppedTask = q.Pop()
 	if poppedTask == nil || poppedTask.ID != 1 {
 		t.Errorf("First pop returned %v, expected task1", poppedTask)
 	}
-	poppedTask = q.pop()
+	poppedTask = q.Pop()
 	if poppedTask == nil || poppedTask.ID != 2 {
 		t.Errorf("Second pop returned %v, expected task2", poppedTask)
 	}
@@ -109,7 +109,7 @@ func TestInpProcessBasicFlow(t *testing.T) {
 
 // TestOutProcessBasicFlow tests the basic workflow outProcess.
 func TestOutProcessBasicFlow(t *testing.T) {
-	q := newQueue()
+	q := NewQueue()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -118,8 +118,8 @@ func TestOutProcessBasicFlow(t *testing.T) {
 	// Put tasks directly into the queue (simulate inpProcess)
 	task1 := &Task{ID: 1}
 	task2 := &Task{ID: 2}
-	q.push(task1)
-	q.push(task2)
+	q.Push(task1)
+	q.Push(task2)
 
 	// Signal outProcess about the presence of tasks
 	select {
