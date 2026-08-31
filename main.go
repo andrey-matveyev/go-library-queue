@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-
-	"time"
-
 	queue "github.com/andrey-matveyev/go-library-queue/queue"
+	"time"
 )
 
 type Task struct {
@@ -25,10 +23,8 @@ func main() {
 	inpChan := make(chan Task)
 
 	// 2. Embed our queue into the pipeline:
-	// inpChan -> inpQueue (transforms channel to queue) -> outQueue (transforms queue to channel) -> outChan
 	// This stage simulates some processing and includes the queue.
 	outChan := queue.AddQueue(mainCtx, queue.NewListQueue[Task](), inpChan)
-	//queue.OutQueue(mainCtx, queue.InpQueue(inpChan))
 
 	// 3. Start a producer goroutine:
 	// It will generate tasks and send them to inpChan.
