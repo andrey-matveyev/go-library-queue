@@ -333,3 +333,103 @@ func TestSlowConsumerFastProducer(t *testing.T) {
 		})
 	}
 }
+
+func TestRingQueueResizeAndWrap(t *testing.T) {
+	q := NewRingQueue[*Task](4)
+	// Push more than capacity (4) to trigger resize
+	for i := 1; i <= 10; i++ {
+		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
+	}
+
+	if q.Len() != 10 {
+		t.Errorf("Expected length 10 after resize, got %d", q.Len())
+	}
+
+	// Pop half and push more to test wrap around
+	for i := 1; i <= 5; i++ {
+		task, ok := q.Pop()
+		if !ok || task.ID != i {
+			t.Errorf("Pop %d failed: got (%v, %v)", i, task, ok)
+		}
+	}
+
+	for i := 11; i <= 15; i++ {
+		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
+	}
+
+	if q.Len() != 10 { // 5 remaining + 5 new
+		t.Errorf("Expected length 10 after wrap-around push, got %d", q.Len())
+	}
+
+	// Pop all remaining
+	expectedIDs := []int{6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+	for _, expectedID := range expectedIDs {
+		task, ok := q.Pop()
+		if !ok || task.ID != expectedID {
+			t.Errorf("Pop expected ID %d, got (%v, %v)", expectedID, task, ok)
+		}
+	}
+
+	if q.Len() != 0 {
+		t.Errorf("Expected length 0 at end, got %d", q.Len())
+	}
+}
+
+func TestConcurrentQueueStress(t *testing.T) {
+	queues := map[string]Queue[*Task]{
+		"ListQueue": NewListQueue[*Task](),
+		"RingQueue": NewRingQueue[*Task](4),
+	}
+
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			var wg sync.WaitGroup
+			workers := 10
+			tasksPerWorker := 100
+
+			// Concurrent producers
+			for w := 0; w < workers; w++ {
+				wg.Add(1)
+				go func(workerID int) {
+					defer wg.Done()
+					for i := 0; i < tasksPerWorker; i++ {
+						q.Push(&Task{ID: workerID*1000 + i})
+					}
+				}(w)
+			}
+
+			wg.Wait()
+
+			totalTasks := workers * tasksPerWorker
+			if q.Len() != totalTasks {
+				t.Errorf("Expected %d tasks, got %d", totalTasks, q.Len())
+			}
+
+			// Concurrent consumers
+			var mu sync.Mutex
+			count := 0
+
+			for w := 0; w < workers; w++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for {
+						_, ok := q.Pop()
+						if !ok {
+							return
+						}
+						mu.Lock()
+						count++
+						mu.Unlock()
+					}
+				}()
+			}
+
+			wg.Wait()
+
+			if count != totalTasks {
+				t.Errorf("Expected to pop %d tasks, got %d", totalTasks, count)
+			}
+		})
+	}
+}
