@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// go test -bench=. -benchmem ./queue/
+
 // BenchmarkQueuePipeline unbuffered input channel (pure queue + pipeline overhead)
 func benchmarkQueuePipelineUnbuffered(b *testing.B, newQueue func() Queue[*Task], numTasks int) {
 	b.ReportAllocs()
