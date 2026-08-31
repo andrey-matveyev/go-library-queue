@@ -36,8 +36,8 @@ func TestQueuePushPop(t *testing.T) {
 	task2 := &Task{ID: 2, Data: "Task 2"}
 
 	// Check pop from empty queue
-	if poppedTask := q.Pop(); poppedTask != nil {
-		t.Errorf("Pop from empty queue returned %v, expected nil", poppedTask)
+	if poppedTask, ok := q.Pop(); ok || poppedTask != nil {
+		t.Errorf("Pop from empty queue returned (%v, %v), expected (nil, false)", poppedTask, ok)
 	}
 
 	// Push task1
@@ -47,9 +47,9 @@ func TestQueuePushPop(t *testing.T) {
 	}
 
 	// Pop task1
-	poppedTask := q.Pop()
-	if poppedTask == nil || poppedTask.ID != 1 {
-		t.Errorf("Pop returned %v, expected task1", poppedTask)
+	poppedTask, ok := q.Pop()
+	if !ok || poppedTask == nil || poppedTask.ID != 1 {
+		t.Errorf("Pop returned (%v, %v), expected task1", poppedTask, ok)
 	}
 	if q.queueTasks.Len() != 0 {
 		t.Errorf("After pop, queue length was %d, expected 0", q.queueTasks.Len())
@@ -62,13 +62,13 @@ func TestQueuePushPop(t *testing.T) {
 		t.Errorf("After two pushes, queue length was %d, expected 2", q.queueTasks.Len())
 	}
 
-	poppedTask = q.Pop()
-	if poppedTask == nil || poppedTask.ID != 1 {
-		t.Errorf("First pop returned %v, expected task1", poppedTask)
+	poppedTask, ok = q.Pop()
+	if !ok || poppedTask == nil || poppedTask.ID != 1 {
+		t.Errorf("First pop returned (%v, %v), expected task1", poppedTask, ok)
 	}
-	poppedTask = q.Pop()
-	if poppedTask == nil || poppedTask.ID != 2 {
-		t.Errorf("Second pop returned %v, expected task2", poppedTask)
+	poppedTask, ok = q.Pop()
+	if !ok || poppedTask == nil || poppedTask.ID != 2 {
+		t.Errorf("Second pop returned (%v, %v), expected task2", poppedTask, ok)
 	}
 	if q.queueTasks.Len() != 0 {
 		t.Errorf("After all pops, queue length was %d, expected 0", q.queueTasks.Len())
