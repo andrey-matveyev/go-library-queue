@@ -8,321 +8,328 @@ import (
 	"time"
 )
 
-// TestNewQueue verifies that NewQueue initializes the structure correctly.
+type Task struct {
+	ID   int
+	Data string
+}
+
 func TestNewQueue(t *testing.T) {
-	q := NewQueue[*Task]()
+	t.Run("ListQueue", func(t *testing.T) {
+		q := NewListQueue[*Task]()
+		if q == nil {
+			t.Errorf("NewListQueue returned nil, expected a pointer to queue")
+		}
+		if q.InnerChan() == nil {
+			t.Errorf("innerChan was not initialized")
+		}
+		if cap(q.InnerChan()) != 1 {
+			t.Errorf("innerChan capacity was %d, expected 1", cap(q.InnerChan()))
+		}
+		if q.Len() != 0 {
+			t.Errorf("queue was not empty, expected 0 elements")
+		}
+	})
 
-	if q == nil {
-		t.Errorf("NewQueue returned nil, expected a pointer to queue")
-	}
-	if q.innerChan == nil {
-		t.Errorf("innerChan was not initialized")
-	}
-	if cap(q.innerChan) != 1 {
-		t.Errorf("innerChan capacity was %d, expected 1", cap(q.innerChan))
-	}
-	if q.queueTasks == nil {
-		t.Errorf("queueTasks was not initialized")
-	}
-	if q.queueTasks.Len() != 0 {
-		t.Errorf("queueTasks was not empty, expected 0 elements")
-	}
+	t.Run("RingQueue", func(t *testing.T) {
+		q := NewRingQueue[*Task](8)
+		if q == nil {
+			t.Errorf("NewRingQueue returned nil, expected a pointer to queue")
+		}
+		if q.InnerChan() == nil {
+			t.Errorf("innerChan was not initialized")
+		}
+		if cap(q.InnerChan()) != 1 {
+			t.Errorf("innerChan capacity was %d, expected 1", cap(q.InnerChan()))
+		}
+		if q.Len() != 0 {
+			t.Errorf("queue was not empty, expected 0 elements")
+		}
+	})
 }
 
-// TestQueuePushPop verifies that Push and Pop operations are correct.
 func TestQueuePushPop(t *testing.T) {
-	q := NewQueue[*Task]()
-	task1 := &Task{ID: 1, Data: "Task 1"}
-	task2 := &Task{ID: 2, Data: "Task 2"}
-
-	// Check pop from empty queue
-	if poppedTask, ok := q.Pop(); ok || poppedTask != nil {
-		t.Errorf("Pop from empty queue returned (%v, %v), expected (nil, false)", poppedTask, ok)
+	queues := map[string]Queue[*Task]{
+		"ListQueue": NewListQueue[*Task](),
+		"RingQueue": NewRingQueue[*Task](8),
 	}
 
-	// Push task1
-	q.Push(task1)
-	if q.queueTasks.Len() != 1 {
-		t.Errorf("After push, queue length was %d, expected 1", q.queueTasks.Len())
-	}
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			task1 := &Task{ID: 1, Data: "Task 1"}
+			task2 := &Task{ID: 2, Data: "Task 2"}
 
-	// Pop task1
-	poppedTask, ok := q.Pop()
-	if !ok || poppedTask == nil || poppedTask.ID != 1 {
-		t.Errorf("Pop returned (%v, %v), expected task1", poppedTask, ok)
-	}
-	if q.queueTasks.Len() != 0 {
-		t.Errorf("After pop, queue length was %d, expected 0", q.queueTasks.Len())
-	}
-
-	// Push task1 and task2, then pop in order
-	q.Push(task1)
-	q.Push(task2)
-	if q.queueTasks.Len() != 2 {
-		t.Errorf("After two pushes, queue length was %d, expected 2", q.queueTasks.Len())
-	}
-
-	poppedTask, ok = q.Pop()
-	if !ok || poppedTask == nil || poppedTask.ID != 1 {
-		t.Errorf("First pop returned (%v, %v), expected task1", poppedTask, ok)
-	}
-	poppedTask, ok = q.Pop()
-	if !ok || poppedTask == nil || poppedTask.ID != 2 {
-		t.Errorf("Second pop returned (%v, %v), expected task2", poppedTask, ok)
-	}
-	if q.queueTasks.Len() != 0 {
-		t.Errorf("After all pops, queue length was %d, expected 0", q.queueTasks.Len())
-	}
-}
-
-// TestInpProcessBasicFlow tests the basic flow of work inpProcess.
-func TestInpProcessBasicFlow(t *testing.T) {
-	inp := make(chan *Task, 5)
-	q := InpQueue(inp) // inpProcess starts here
-
-	// We send several tasks
-	for i := range 3 {
-		inp <- &Task{ID: i}
-	}
-	time.Sleep(10 * time.Millisecond) // Give time to the inpProcess goroutine to process tasks
-
-	if q.queueTasks.Len() != 3 {
-		t.Errorf("Expected 3 tasks in queue, got %d", q.queueTasks.Len())
-	}
-
-	// Close the input channel so that inpProcess can complete
-	close(inp)
-	time.Sleep(10 * time.Millisecond) // Give inpProcess time to complete
-
-	select {
-	case <-q.innerChan: // Read from buffer
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed by inpProcess")
-		}
-	default:
-	}
-}
-
-// TestOutProcessBasicFlow tests the basic workflow outProcess.
-func TestOutProcessBasicFlow(t *testing.T) {
-	q := NewQueue[*Task]()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	out := OutQueue(ctx, q) // outProcess starts here
-
-	// Put tasks directly into the queue (simulate inpProcess)
-	task1 := &Task{ID: 1}
-	task2 := &Task{ID: 2}
-	q.Push(task1)
-	q.Push(task2)
-
-	// Signal outProcess about the presence of tasks
-	select {
-	case q.innerChan <- struct{}{}:
-	default:
-	}
-
-	receivedTasks := []*Task{}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 2; i++ {
-			select {
-			case t := <-out:
-				receivedTasks = append(receivedTasks, t)
-			case <-time.After(100 * time.Millisecond):
-				t.Error("Timed out waiting for task from out channel")
-				return
+			if poppedTask, ok := q.Pop(); ok || poppedTask != nil {
+				t.Errorf("Pop from empty queue returned (%v, %v), expected (nil, false)", poppedTask, ok)
 			}
-		}
-	}()
 
-	wg.Wait()
+			q.Push(task1)
+			if q.Len() != 1 {
+				t.Errorf("After push, queue length was %d, expected 1", q.Len())
+			}
 
-	if len(receivedTasks) != 2 {
-		t.Errorf("Expected 2 tasks, got %d", len(receivedTasks))
-	}
-	if receivedTasks[0].ID != 1 || receivedTasks[1].ID != 2 {
-		t.Errorf("Tasks received in wrong order: %v", receivedTasks)
-	}
+			poppedTask, ok := q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 1 {
+				t.Errorf("Pop returned (%v, %v), expected task1", poppedTask, ok)
+			}
+			if q.Len() != 0 {
+				t.Errorf("After pop, queue length was %d, expected 0", q.Len())
+			}
 
-	// Check that outProcess completes when the queue is empty.
-	close(q.innerChan)
+			q.Push(task1)
+			q.Push(task2)
+			if q.Len() != 2 {
+				t.Errorf("After two pushes, queue length was %d, expected 2", q.Len())
+			}
 
-	// Give time for outProcess to complete
-	time.Sleep(10 * time.Millisecond)
-
-	// Make sure out is closed
-	_, ok := <-out
-	if ok {
-		t.Errorf("out channel was not closed by outProcess")
-	}
-}
-
-// TestPipelineCompletion tests end-to-end pipeline completion.
-func TestPipelineCompletion(t *testing.T) {
-	inp := make(chan *Task, 5)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	q := InpQueue(inp)
-	out := OutQueue(ctx, q)
-
-	expectedTasks := 5
-	for i := 0; i < expectedTasks; i++ {
-		inp <- &Task{ID: i, Data: fmt.Sprintf("Data %d", i)}
-	}
-	close(inp) // Close the input channel
-
-	receivedCount := 0
-	for range out { // Read from the output channel until it closes
-		receivedCount++
-	}
-
-	if receivedCount != expectedTasks {
-		t.Errorf("Expected %d tasks, got %d", expectedTasks, receivedCount)
-	}
-
-	// Make sure all goroutines have completed
-	time.Sleep(50 * time.Millisecond)
-
-	select {
-	case <-q.innerChan: // Read from buffer
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed")
-		}
-	default:
-	}
-	select {
-	case _, ok := <-out:
-		if ok {
-			t.Errorf("out was not closed")
-		}
-	default:
+			poppedTask, ok = q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 1 {
+				t.Errorf("First pop returned (%v, %v), expected task1", poppedTask, ok)
+			}
+			poppedTask, ok = q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 2 {
+				t.Errorf("Second pop returned (%v, %v), expected task2", poppedTask, ok)
+			}
+			if q.Len() != 0 {
+				t.Errorf("After all pops, queue length was %d, expected 0", q.Len())
+			}
+		})
 	}
 }
 
-// TestPipelineCancellation checks pipeline cancellation via context.
+func TestInpProcessBasicFlow(t *testing.T) {
+	queues := map[string]Queue[*Task]{
+		"ListQueue": NewListQueue[*Task](),
+		"RingQueue": NewRingQueue[*Task](8),
+	}
+
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 5)
+			go inpProcess(inp, q)
+
+			for i := range 3 {
+				inp <- &Task{ID: i}
+			}
+			time.Sleep(10 * time.Millisecond)
+
+			if q.Len() != 3 {
+				t.Errorf("Expected 3 tasks in queue, got %d", q.Len())
+			}
+
+			close(inp)
+			time.Sleep(10 * time.Millisecond)
+
+			select {
+			case <-q.InnerChan():
+			default:
+			}
+			select {
+			case _, ok := <-q.InnerChan():
+				if ok {
+					t.Errorf("innerChan was not closed by inpProcess")
+				}
+			default:
+			}
+		})
+	}
+}
+
+func TestOutProcessBasicFlow(t *testing.T) {
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	}
+
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			q := newQ()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			out := make(chan *Task)
+			go outProcess(ctx, q, out)
+
+			task1 := &Task{ID: 1}
+			task2 := &Task{ID: 2}
+			q.Push(task1)
+			q.Push(task2)
+
+			select {
+			case q.InnerChan() <- struct{}{}:
+			default:
+			}
+
+			select {
+			case t1 := <-out:
+				if t1 == nil || t1.ID != 1 {
+					t.Errorf("Received %v, expected task1", t1)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Errorf("Timeout waiting for task1")
+			}
+
+			select {
+			case t2 := <-out:
+				if t2 == nil || t2.ID != 2 {
+					t.Errorf("Received %v, expected task2", t2)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Errorf("Timeout waiting for task2")
+			}
+		})
+	}
+}
+
+func TestAddQueuePipeline(t *testing.T) {
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	}
+
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 10)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			out := AddQueue(ctx, newQ(), inp)
+
+			expectedTasks := 5
+			go func() {
+				for i := 1; i <= expectedTasks; i++ {
+					inp <- &Task{ID: i, Data: fmt.Sprintf("Task %d", i)}
+				}
+				close(inp)
+			}()
+
+			receivedTasks := 0
+			for task := range out {
+				receivedTasks++
+				if task.ID != receivedTasks {
+					t.Errorf("Expected task ID %d, got %d", receivedTasks, task.ID)
+				}
+			}
+
+			if receivedTasks != expectedTasks {
+				t.Errorf("Expected %d tasks, got %d", expectedTasks, receivedTasks)
+			}
+
+			time.Sleep(50 * time.Millisecond)
+		})
+	}
+}
+
 func TestPipelineCancellation(t *testing.T) {
-	inp := make(chan *Task, 10)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	q := InpQueue(inp)
-	out := OutQueue(ctx, q)
-
-	// Start a goroutine that will send tasks but not close the channel
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		for i := 0; i < 100; i++ { // We send a lot of tasks
-			inp <- &Task{ID: i}
-			time.Sleep(1 * time.Millisecond)
-		}
-		wg.Done()
-	}()
-
-	// We wait a bit so that the tasks have time to get into the queue and outProcess starts working
-	time.Sleep(50 * time.Millisecond)
-
-	// Cancel the context
-	cancel()
-
-	// Give goroutines time to complete after cancellation
-	time.Sleep(50 * time.Millisecond)
-
-	select {
-	case _, ok := <-out:
-		if ok {
-			t.Errorf("out channel is still open after context cancellation")
-		}
-	default:
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
 	}
 
-	// Make sure inpProcess keeps running until inp is closed
-	// (even though outProcess has already finished)
-	// Add another task and make sure it gets into the queue
-	inp <- &Task{ID: 999}
-	time.Sleep(10 * time.Millisecond)
-	// We can't check how many tasks have been processed because out is closed.
-	// It's important that outProcess _has completed_.
-	if q.queueTasks.Len() == 0 {
-		t.Errorf("Expected some tasks to remain in queue after cancellation, got 0")
-	}
-	// Close inp so that inpProcess also terminates
-	wg.Wait()
-	close(inp)
-	time.Sleep(10 * time.Millisecond)
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 10)
+			ctx, cancel := context.WithCancel(context.Background())
 
-	select {
-	case <-q.innerChan: // Read from buffer
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed")
-		}
-	default:
+			q := newQ()
+			out := AddQueue(ctx, q, inp)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				for i := 0; i < 100; i++ {
+					inp <- &Task{ID: i}
+					time.Sleep(1 * time.Millisecond)
+				}
+				wg.Done()
+			}()
+
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+			time.Sleep(50 * time.Millisecond)
+
+			select {
+			case _, ok := <-out:
+				if ok {
+					t.Errorf("out channel is still open after context cancellation")
+				}
+			default:
+			}
+
+			inp <- &Task{ID: 999}
+			time.Sleep(10 * time.Millisecond)
+			if q.Len() == 0 {
+				t.Errorf("Expected some tasks to remain in queue after cancellation, got 0")
+			}
+			wg.Wait()
+			close(inp)
+			time.Sleep(10 * time.Millisecond)
+
+			select {
+			case <-q.InnerChan():
+			default:
+			}
+			select {
+			case _, ok := <-q.InnerChan():
+				if ok {
+					t.Errorf("innerChan was not closed")
+				}
+			default:
+			}
+		})
 	}
 }
 
-// TestSlowConsumerFastProducer checks that the queue smoothes out speed differences.
 func TestSlowConsumerFastProducer(t *testing.T) {
-	inp := make(chan *Task, 100) // Buffer for producer
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	q := InpQueue(inp)
-	out := OutQueue(ctx, q)
-
-	numTasks := 20
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	// Producer: quickly sends tasks
-	go func() {
-		defer wg.Done()
-		for i := 0; i < numTasks; i++ {
-			inp <- &Task{ID: i, Data: fmt.Sprintf("Data %d", i)}
-			time.Sleep(5 * time.Millisecond) // Very fast
-		}
-		close(inp)
-	}()
-
-	// Consumer: Processes tasks slowly
-	receivedCount := 0
-	for range out {
-		receivedCount++
-		time.Sleep(50 * time.Millisecond) // Very slowly
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
 	}
 
-	wg.Wait() // Wait for the producer to complete
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 100)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	if receivedCount != numTasks {
-		t.Errorf("Expected %d tasks, got %d", numTasks, receivedCount)
-	}
+			q := newQ()
+			out := AddQueue(ctx, q, inp)
 
-	// Here we just make sure that the pipeline terminated correctly,
-	// and that the internal queue mechanisms dealt with the imbalance.
-	select {
-	case <-q.innerChan: // Read from buffer
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed after all tasks processed")
-		}
-	default:
+			numTasks := 20
+			var wg sync.WaitGroup
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+				for i := 0; i < numTasks; i++ {
+					inp <- &Task{ID: i, Data: fmt.Sprintf("Data %d", i)}
+					time.Sleep(5 * time.Millisecond)
+				}
+				close(inp)
+			}()
+
+			receivedCount := 0
+			for range out {
+				receivedCount++
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			wg.Wait()
+
+			if receivedCount != numTasks {
+				t.Errorf("Expected %d tasks, got %d", numTasks, receivedCount)
+			}
+
+			select {
+			case <-q.InnerChan():
+			default:
+			}
+			select {
+			case _, ok := <-q.InnerChan():
+				if ok {
+					t.Errorf("innerChan was not closed after all tasks processed")
+				}
+			default:
+			}
+		})
 	}
 }
