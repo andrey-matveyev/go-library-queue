@@ -8,256 +8,428 @@ import (
 	"time"
 )
 
-type TestTask struct {
+type Task struct {
 	ID   int
 	Data string
 }
 
 func TestNewQueue(t *testing.T) {
-	q := NewQueue[*TestTask]()
+	t.Run("ListQueue", func(t *testing.T) {
+		q := NewListQueue[*Task]()
+		if q == nil {
+			t.Errorf("NewListQueue returned nil, expected a pointer to queue")
+		}
+		if q.InnerChan() == nil {
+			t.Errorf("innerChan was not initialized")
+		}
+		if cap(q.InnerChan()) != 1 {
+			t.Errorf("innerChan capacity was %d, expected 1", cap(q.InnerChan()))
+		}
+		if q.Len() != 0 {
+			t.Errorf("queue was not empty, expected 0 elements")
+		}
+	})
 
-	if q == nil {
-		t.Errorf("NewQueue returned nil, expected a pointer to queue")
-	}
-	if q.innerChan == nil {
-		t.Errorf("innerChan was not initialized")
-	}
-	if cap(q.innerChan) != 1 {
-		t.Errorf("innerChan capacity was %d, expected 1", cap(q.innerChan))
-	}
-	if q.tasks == nil {
-		t.Errorf("tasks was not initialized")
-	}
-	if q.Len() != 0 {
-		t.Errorf("tasks was not empty, expected 0 elements")
-	}
+	t.Run("RingQueue", func(t *testing.T) {
+		q := NewRingQueue[*Task](8)
+		if q == nil {
+			t.Errorf("NewRingQueue returned nil, expected a pointer to queue")
+		}
+		if q.InnerChan() == nil {
+			t.Errorf("innerChan was not initialized")
+		}
+		if cap(q.InnerChan()) != 1 {
+			t.Errorf("innerChan capacity was %d, expected 1", cap(q.InnerChan()))
+		}
+		if q.Len() != 0 {
+			t.Errorf("queue was not empty, expected 0 elements")
+		}
+	})
 }
 
 func TestQueuePushPop(t *testing.T) {
-	q := NewQueue[*TestTask]()
-	task1 := &TestTask{ID: 1, Data: "Task 1"}
-	task2 := &TestTask{ID: 2, Data: "Task 2"}
-
-	if poppedTask, found := q.Pop(); found || poppedTask != nil {
-		t.Errorf("Pop from empty queue returned %v, %v, expected nil, false", poppedTask, found)
+	queues := map[string]Queue[*Task]{
+		"ListQueue": NewListQueue[*Task](),
+		"RingQueue": NewRingQueue[*Task](8),
 	}
 
-	if err := q.Push(task1); err != nil {
-		t.Errorf("Unexpected error on push: %v", err)
-	}
-	if q.Len() != 1 {
-		t.Errorf("After push, queue length was %d, expected 1", q.Len())
-	}
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			task1 := &Task{ID: 1, Data: "Task 1"}
+			task2 := &Task{ID: 2, Data: "Task 2"}
 
-	poppedTask, found := q.Pop()
-	if !found || poppedTask == nil || poppedTask.ID != 1 {
-		t.Errorf("Pop returned %v, %v, expected task1", poppedTask, found)
-	}
-	if q.Len() != 0 {
-		t.Errorf("After pop, queue length was %d, expected 0", q.Len())
-	}
+			if poppedTask, ok := q.Pop(); ok || poppedTask != nil {
+				t.Errorf("Pop from empty queue returned (%v, %v), expected (nil, false)", poppedTask, ok)
+			}
 
-	q.Push(task1)
-	q.Push(task2)
-	if q.Len() != 2 {
-		t.Errorf("After two pushes, queue length was %d, expected 2", q.Len())
-	}
+			q.Push(task1)
+			if q.Len() != 1 {
+				t.Errorf("After push, queue length was %d, expected 1", q.Len())
+			}
 
-	poppedTask, found = q.Pop()
-	if !found || poppedTask == nil || poppedTask.ID != 1 {
-		t.Errorf("First pop returned %v, expected task1", poppedTask)
-	}
-	poppedTask, found = q.Pop()
-	if !found || poppedTask == nil || poppedTask.ID != 2 {
-		t.Errorf("Second pop returned %v, expected task2", poppedTask)
-	}
-	if q.Len() != 0 {
-		t.Errorf("After all pops, queue length was %d, expected 0", q.Len())
-	}
-}
+			poppedTask, ok := q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 1 {
+				t.Errorf("Pop returned (%v, %v), expected task1", poppedTask, ok)
+			}
+			if q.Len() != 0 {
+				t.Errorf("After pop, queue length was %d, expected 0", q.Len())
+			}
 
-func TestQueuePushClosed(t *testing.T) {
-	q := NewQueue[*TestTask]()
-	q.Close()
+			q.Push(task1)
+			q.Push(task2)
+			if q.Len() != 2 {
+				t.Errorf("After two pushes, queue length was %d, expected 2", q.Len())
+			}
 
-	err := q.Push(&TestTask{ID: 1})
-	if err != ErrQueueClosed {
-		t.Errorf("Expected ErrQueueClosed, got %v", err)
+			poppedTask, ok = q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 1 {
+				t.Errorf("First pop returned (%v, %v), expected task1", poppedTask, ok)
+			}
+			poppedTask, ok = q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 2 {
+				t.Errorf("Second pop returned (%v, %v), expected task2", poppedTask, ok)
+			}
+			if q.Len() != 0 {
+				t.Errorf("After all pops, queue length was %d, expected 0", q.Len())
+			}
+		})
 	}
 }
 
 func TestInpProcessBasicFlow(t *testing.T) {
-	inp := make(chan *TestTask, 5)
-	q := InpQueue(inp)
-
-	for i := range 3 {
-		inp <- &TestTask{ID: i}
-	}
-	time.Sleep(10 * time.Millisecond)
-
-	if q.Len() != 3 {
-		t.Errorf("Expected 3 tasks in queue, got %d", q.Len())
+	queues := map[string]Queue[*Task]{
+		"ListQueue": NewListQueue[*Task](),
+		"RingQueue": NewRingQueue[*Task](8),
 	}
 
-	close(inp)
-	time.Sleep(10 * time.Millisecond)
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 5)
+			go inpProcess(inp, q)
 
-	select {
-	case <-q.innerChan:
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed by inpProcess")
-		}
-	default:
+			for i := range 3 {
+				inp <- &Task{ID: i}
+			}
+			time.Sleep(10 * time.Millisecond)
+
+			if q.Len() != 3 {
+				t.Errorf("Expected 3 tasks in queue, got %d", q.Len())
+			}
+
+			close(inp)
+			time.Sleep(10 * time.Millisecond)
+
+			select {
+			case <-q.InnerChan():
+			default:
+			}
+			select {
+			case _, ok := <-q.InnerChan():
+				if ok {
+					t.Errorf("innerChan was not closed by inpProcess")
+				}
+			default:
+			}
+		})
 	}
 }
 
 func TestOutProcessBasicFlow(t *testing.T) {
-	q := NewQueue[*TestTask]()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	out := OutQueue(ctx, q)
-
-	task1 := &TestTask{ID: 1}
-	task2 := &TestTask{ID: 2}
-	q.Push(task1)
-	q.Push(task2)
-
-	select {
-	case q.innerChan <- struct{}{}:
-	default:
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
 	}
 
-	r1 := <-out
-	if r1 == nil || r1.ID != 1 {
-		t.Errorf("Expected task1, got %v", r1)
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			q := newQ()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			out := make(chan *Task)
+			go outProcess(ctx, q, out)
+
+			task1 := &Task{ID: 1}
+			task2 := &Task{ID: 2}
+			q.Push(task1)
+			q.Push(task2)
+
+			select {
+			case q.InnerChan() <- struct{}{}:
+			default:
+			}
+
+			select {
+			case t1 := <-out:
+				if t1 == nil || t1.ID != 1 {
+					t.Errorf("Received %v, expected task1", t1)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Errorf("Timeout waiting for task1")
+			}
+
+			select {
+			case t2 := <-out:
+				if t2 == nil || t2.ID != 2 {
+					t.Errorf("Received %v, expected task2", t2)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Errorf("Timeout waiting for task2")
+			}
+		})
+	}
+}
+
+func TestAddQueuePipeline(t *testing.T) {
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
 	}
 
-	r2 := <-out
-	if r2 == nil || r2.ID != 2 {
-		t.Errorf("Expected task2, got %v", r2)
-	}
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 10)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	q.Close()
-	time.Sleep(50 * time.Millisecond)
+			out := AddQueue(ctx, newQ(), inp)
 
-	select {
-	case <-q.innerChan:
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed")
-		}
-	default:
-	}
-	select {
-	case _, ok := <-out:
-		if ok {
-			t.Errorf("out was not closed")
-		}
-	default:
+			expectedTasks := 5
+			go func() {
+				for i := 1; i <= expectedTasks; i++ {
+					inp <- &Task{ID: i, Data: fmt.Sprintf("Task %d", i)}
+				}
+				close(inp)
+			}()
+
+			receivedTasks := 0
+			for task := range out {
+				receivedTasks++
+				if task.ID != receivedTasks {
+					t.Errorf("Expected task ID %d, got %d", receivedTasks, task.ID)
+				}
+			}
+
+			if receivedTasks != expectedTasks {
+				t.Errorf("Expected %d tasks, got %d", expectedTasks, receivedTasks)
+			}
+
+			time.Sleep(50 * time.Millisecond)
+		})
 	}
 }
 
 func TestPipelineCancellation(t *testing.T) {
-	inp := make(chan *TestTask, 10)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	q := InpQueue(inp)
-	out := OutQueue(ctx, q)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		for i := 0; i < 100; i++ {
-			inp <- &TestTask{ID: i}
-			time.Sleep(1 * time.Millisecond)
-		}
-		wg.Done()
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	time.Sleep(50 * time.Millisecond)
-
-	select {
-	case _, ok := <-out:
-		if ok {
-			t.Errorf("out channel is still open after context cancellation")
-		}
-	default:
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
 	}
 
-	inp <- &TestTask{ID: 999}
-	time.Sleep(10 * time.Millisecond)
-	if q.Len() == 0 {
-		t.Errorf("Expected some tasks to remain in queue after cancellation, got 0")
-	}
-	wg.Wait()
-	close(inp)
-	time.Sleep(10 * time.Millisecond)
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 10)
+			ctx, cancel := context.WithCancel(context.Background())
 
-	select {
-	case <-q.innerChan:
-	default:
-	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed")
-		}
-	default:
+			q := newQ()
+			out := AddQueue(ctx, q, inp)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				for i := 0; i < 100; i++ {
+					inp <- &Task{ID: i}
+					time.Sleep(1 * time.Millisecond)
+				}
+				wg.Done()
+			}()
+
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+			time.Sleep(50 * time.Millisecond)
+
+			select {
+			case _, ok := <-out:
+				if ok {
+					t.Errorf("out channel is still open after context cancellation")
+				}
+			default:
+			}
+
+			inp <- &Task{ID: 999}
+			time.Sleep(10 * time.Millisecond)
+			if q.Len() == 0 {
+				t.Errorf("Expected some tasks to remain in queue after cancellation, got 0")
+			}
+			wg.Wait()
+			close(inp)
+			time.Sleep(10 * time.Millisecond)
+
+			select {
+			case <-q.InnerChan():
+			default:
+			}
+			select {
+			case _, ok := <-q.InnerChan():
+				if ok {
+					t.Errorf("innerChan was not closed")
+				}
+			default:
+			}
+		})
 	}
 }
 
 func TestSlowConsumerFastProducer(t *testing.T) {
-	inp := make(chan *TestTask, 100)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	}
 
-	q := InpQueue(inp)
-	out := OutQueue(ctx, q)
+	for name, newQ := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 100)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	numTasks := 20
-	var wg sync.WaitGroup
-	wg.Add(1)
+			q := newQ()
+			out := AddQueue(ctx, q, inp)
 
-	go func() {
-		defer wg.Done()
-		for i := 0; i < numTasks; i++ {
-			inp <- &TestTask{ID: i, Data: fmt.Sprintf("Data %d", i)}
-			time.Sleep(5 * time.Millisecond)
+			numTasks := 20
+			var wg sync.WaitGroup
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+				for i := 0; i < numTasks; i++ {
+					inp <- &Task{ID: i, Data: fmt.Sprintf("Data %d", i)}
+					time.Sleep(5 * time.Millisecond)
+				}
+				close(inp)
+			}()
+
+			receivedCount := 0
+			for range out {
+				receivedCount++
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			wg.Wait()
+
+			if receivedCount != numTasks {
+				t.Errorf("Expected %d tasks, got %d", numTasks, receivedCount)
+			}
+
+			select {
+			case <-q.InnerChan():
+			default:
+			}
+			select {
+			case _, ok := <-q.InnerChan():
+				if ok {
+					t.Errorf("innerChan was not closed after all tasks processed")
+				}
+			default:
+			}
+		})
+	}
+}
+
+func TestRingQueueResizeAndWrap(t *testing.T) {
+	q := NewRingQueue[*Task](4)
+	// Push more than capacity (4) to trigger resize
+	for i := 1; i <= 10; i++ {
+		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
+	}
+
+	if q.Len() != 10 {
+		t.Errorf("Expected length 10 after resize, got %d", q.Len())
+	}
+
+	// Pop half and push more to test wrap around
+	for i := 1; i <= 5; i++ {
+		task, ok := q.Pop()
+		if !ok || task.ID != i {
+			t.Errorf("Pop %d failed: got (%v, %v)", i, task, ok)
 		}
-		close(inp)
-	}()
-
-	receivedCount := 0
-	for range out {
-		receivedCount++
-		time.Sleep(50 * time.Millisecond)
 	}
 
-	wg.Wait()
-
-	if receivedCount != numTasks {
-		t.Errorf("Expected %d tasks, got %d", numTasks, receivedCount)
+	for i := 11; i <= 15; i++ {
+		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
 	}
 
-	select {
-	case <-q.innerChan:
-	default:
+	if q.Len() != 10 { // 5 remaining + 5 new
+		t.Errorf("Expected length 10 after wrap-around push, got %d", q.Len())
 	}
-	select {
-	case _, ok := <-q.innerChan:
-		if ok {
-			t.Errorf("innerChan was not closed after all tasks processed")
+
+	// Pop all remaining
+	expectedIDs := []int{6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+	for _, expectedID := range expectedIDs {
+		task, ok := q.Pop()
+		if !ok || task.ID != expectedID {
+			t.Errorf("Pop expected ID %d, got (%v, %v)", expectedID, task, ok)
 		}
-	default:
+	}
+
+	if q.Len() != 0 {
+		t.Errorf("Expected length 0 at end, got %d", q.Len())
+	}
+}
+
+func TestConcurrentQueueStress(t *testing.T) {
+	queues := map[string]Queue[*Task]{
+		"ListQueue": NewListQueue[*Task](),
+		"RingQueue": NewRingQueue[*Task](4),
+	}
+
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			var wg sync.WaitGroup
+			workers := 10
+			tasksPerWorker := 100
+
+			// Concurrent producers
+			for w := 0; w < workers; w++ {
+				wg.Add(1)
+				go func(workerID int) {
+					defer wg.Done()
+					for i := 0; i < tasksPerWorker; i++ {
+						q.Push(&Task{ID: workerID*1000 + i})
+					}
+				}(w)
+			}
+
+			wg.Wait()
+
+			totalTasks := workers * tasksPerWorker
+			if q.Len() != totalTasks {
+				t.Errorf("Expected %d tasks, got %d", totalTasks, q.Len())
+			}
+
+			// Concurrent consumers
+			var mu sync.Mutex
+			count := 0
+
+			for w := 0; w < workers; w++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for {
+						_, ok := q.Pop()
+						if !ok {
+							return
+						}
+						mu.Lock()
+						count++
+						mu.Unlock()
+					}
+				}()
+			}
+
+			wg.Wait()
+
+			if count != totalTasks {
+				t.Errorf("Expected to pop %d tasks, got %d", totalTasks, count)
+			}
+		})
 	}
 }
