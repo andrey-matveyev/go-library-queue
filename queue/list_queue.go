@@ -8,15 +8,15 @@ import (
 var _ Queue[any] = (*ListQueue[any])(nil)
 
 type ListQueue[T any] struct {
-	mtx        sync.Mutex
-	queueTasks *list.List
-	innerChan  chan struct{}
+	mtx       sync.Mutex
+	items     *list.List
+	innerChan chan struct{}
 }
 
 func NewListQueue[T any]() *ListQueue[T] {
 	return &ListQueue[T]{
-		queueTasks: list.New(),
-		innerChan:  make(chan struct{}, 1),
+		items:     list.New(),
+		innerChan: make(chan struct{}, 1),
 	}
 }
 
@@ -24,7 +24,7 @@ func (q *ListQueue[T]) Push(task T) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
-	q.queueTasks.PushBack(task)
+	q.items.PushBack(task)
 
 	select {
 	case q.innerChan <- struct{}{}:
@@ -36,26 +36,22 @@ func (q *ListQueue[T]) Pop() (T, bool) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
-	if q.queueTasks.Len() == 0 {
+	if q.items.Len() == 0 {
 		var zero T
 		return zero, false
 	}
 
-	elem := q.queueTasks.Front()
-	q.queueTasks.Remove(elem)
+	elem := q.items.Front()
+	q.items.Remove(elem)
 	return elem.Value.(T), true
 }
 
 func (q *ListQueue[T]) Len() int {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
-	return q.queueTasks.Len()
+	return q.items.Len()
 }
 
-func (q *ListQueue[T]) SignalChan() <-chan struct{} {
+func (q *ListQueue[T]) InnerChan() chan struct{} {
 	return q.innerChan
-}
-
-func (q *ListQueue[T]) CloseSignal() {
-	close(q.innerChan)
 }

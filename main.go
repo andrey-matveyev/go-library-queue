@@ -3,9 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/andrey-matveyev/go-library-queue/queue"
+
 	"time"
+
+	queue "github.com/andrey-matveyev/go-library-queue/queue"
 )
+
+type Task struct {
+	ID   int
+	Data string
+}
 
 func main() {
 	startTime := time.Now()
@@ -15,12 +22,13 @@ func main() {
 
 	// 1. Create an initial input channel for tasks
 	// In a real system, we get it from the previous pipeline element.
-	inpChan := make(chan *queue.Task)
+	inpChan := make(chan Task)
 
 	// 2. Embed our queue into the pipeline:
 	// inpChan -> inpQueue (transforms channel to queue) -> outQueue (transforms queue to channel) -> outChan
 	// This stage simulates some processing and includes the queue.
-	outChan := queue.OutQueue(mainCtx, queue.InpQueue(inpChan))
+	outChan := queue.AddQueue(mainCtx, queue.NewListQueue[Task](), inpChan)
+	//queue.OutQueue(mainCtx, queue.InpQueue(inpChan))
 
 	// 3. Start a producer goroutine:
 	// It will generate tasks and send them to inpChan.
@@ -28,7 +36,7 @@ func main() {
 	go func() {
 		fmt.Printf("Producer: started. (%dms)\n", time.Since(startTime).Milliseconds())
 		for i := range 5 {
-			task := &queue.Task{ID: i, Data: fmt.Sprintf("Task #%d", i)}
+			task := Task{ID: i, Data: fmt.Sprintf("Task #%d", i)}
 			fmt.Printf("Producer: Sending %s  (%dms)\n", task.Data, time.Since(startTime).Milliseconds())
 			inpChan <- task
 			produced++

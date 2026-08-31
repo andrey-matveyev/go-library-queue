@@ -2,9 +2,9 @@ package queue
 
 import "sync"
 
-var _ Queue[any] = (*DynamicRingQueue[any])(nil)
+var _ Queue[any] = (*RingQueue[any])(nil)
 
-type DynamicRingQueue[T any] struct {
+type RingQueue[T any] struct {
 	mtx       sync.Mutex
 	items     []T
 	head      int
@@ -13,17 +13,17 @@ type DynamicRingQueue[T any] struct {
 	innerChan chan struct{}
 }
 
-func NewDynamicRingQueue[T any](initialCapacity int) *DynamicRingQueue[T] {
+func NewRingQueue[T any](initialCapacity int) *RingQueue[T] {
 	if initialCapacity <= 0 {
 		initialCapacity = 8
 	}
-	return &DynamicRingQueue[T]{
+	return &RingQueue[T]{
 		items:     make([]T, initialCapacity),
 		innerChan: make(chan struct{}, 1), // Буфер 1 защищает Push от блокировки
 	}
 }
 
-func (q *DynamicRingQueue[T]) Push(task T) {
+func (q *RingQueue[T]) Push(task T) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
@@ -41,7 +41,33 @@ func (q *DynamicRingQueue[T]) Push(task T) {
 	}
 }
 
-func (q *DynamicRingQueue[T]) resize() {
+func (q *RingQueue[T]) Pop() (T, bool) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	if q.size == 0 {
+		var zero T
+		return zero, false
+	}
+
+	item := q.items[q.head]
+
+	var zero T
+	q.items[q.head] = zero // Очищаем ячейку для работы GC
+
+	q.head = (q.head + 1) % cap(q.items)
+	q.size--
+
+	return item, true
+}
+
+func (q *RingQueue[T]) Len() int {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+	return q.size
+}
+
+func (q *RingQueue[T]) resize() {
 	oldCap := cap(q.items)
 	var newCap int
 
@@ -64,36 +90,6 @@ func (q *DynamicRingQueue[T]) resize() {
 	q.tail = oldCap
 }
 
-func (q *DynamicRingQueue[T]) Pop() (T, bool) {
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-
-	if q.size == 0 {
-		var zero T
-		return zero, false
-	}
-
-	item := q.items[q.head]
-
-	var zero T
-	q.items[q.head] = zero // Очищаем ячейку для работы GC
-
-	q.head = (q.head + 1) % cap(q.items)
-	q.size--
-
-	return item, true
-}
-
-func (q *DynamicRingQueue[T]) Len() int {
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	return q.size
-}
-
-func (q *DynamicRingQueue[T]) SignalChan() <-chan struct{} {
+func (q *RingQueue[T]) InnerChan() chan struct{} {
 	return q.innerChan
-}
-
-func (q *DynamicRingQueue[T]) CloseSignal() {
-	close(q.innerChan) // Безопасно, так как вызывается строго один раз в конце inpProcess
 }
