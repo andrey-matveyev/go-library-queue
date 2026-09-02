@@ -20,6 +20,38 @@ func AddQueue[T any](ctx context.Context, queue Queue[T], inp chan T) (out chan 
 	return out
 }
 
+func Export[T any](queue Queue[T], marshalFn func(items []T) ([]byte, error)) ([]byte, error) {
+	size := queue.Len()
+	if size == 0 {
+		return marshalFn(nil)
+	}
+
+	flatSlice := make([]T, 0, size)
+
+	for {
+		item, ok := queue.Pop()
+		if !ok {
+			break
+		}
+		flatSlice = append(flatSlice, item)
+	}
+
+	return marshalFn(flatSlice)
+}
+
+func Import[T any](queue Queue[T], data []byte, unmarshalFn func(data []byte) ([]T, error)) error {
+	tempSlice, err := unmarshalFn(data)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range tempSlice {
+		queue.Push(item)
+	}
+
+	return nil
+}
+
 func inpProcess[T any](inp chan T, q Queue[T]) {
 	for value := range inp {
 		q.Push(value)
