@@ -2,7 +2,9 @@ package queue
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -433,3 +435,190 @@ func TestConcurrentQueueStress(t *testing.T) {
 		})
 	}
 }
+
+func TestExportAndImportWithFileStorage(t *testing.T) {
+	queues := map[string]func() Queue[*Task]{
+		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	}
+
+	tmpFileName := "test_queue_state.json"
+	defer os.Remove(tmpFileName)
+
+	for name, newQueue := range queues {
+		t.Run(name, func(t *testing.T) {
+			// Scenario 1: Empty queue export and save to file, then load into new queue
+			t.Run("EmptyQueueExportImport", func(t *testing.T) {
+				os.Remove(tmpFileName)
+				q := newQueue()
+
+				queueBytes, err := Export(q, func(items []*Task) ([]byte, error) {
+					return json.Marshal(items)
+				})
+				if err != nil {
+					t.Fatalf("Failed to export empty queue: %v", err)
+				}
+
+				if err := os.WriteFile(tmpFileName, queueBytes, 0644); err != nil {
+					t.Fatalf("Failed to write empty queue bytes to file: %v", err)
+				}
+
+				// Load from file
+				data, err := os.ReadFile(tmpFileName)
+				if err != nil {
+					t.Fatalf("Failed to read file: %v", err)
+				}
+
+				qLoaded := newQueue()
+				err = Import(qLoaded, data, func(d []byte) ([]*Task, error) {
+					var items []*Task
+					if err := json.Unmarshal(d, &items); err != nil {
+						return nil, err
+					}
+					return items, nil
+				})
+				if err != nil {
+					t.Fatalf("Failed to import into empty queue: %v", err)
+				}
+
+				if qLoaded.Len() != 0 {
+					t.Errorf("Expected loaded queue length to be 0, got %d", qLoaded.Len())
+				}
+			})
+
+			// Scenario 2: Non-existent file load attempt
+			t.Run("NonExistentFileLoad", func(t *testing.T) {
+				os.Remove(tmpFileName)
+				_, err := os.ReadFile(tmpFileName)
+				if err == nil {
+					t.Fatalf("Expected error when reading non-existent file, got nil")
+				}
+			})
+
+			// Scenario 3: Empty file load attempt
+			t.Run("EmptyFileLoad", func(t *testing.T) {
+				if err := os.WriteFile(tmpFileName, []byte{}, 0644); err != nil {
+					t.Fatalf("Failed to write empty file: %v", err)
+				}
+
+				data, err := os.ReadFile(tmpFileName)
+				if err != nil {
+					t.Fatalf("Failed to read empty file: %v", err)
+				}
+
+				qLoaded := newQueue()
+				err = Import(qLoaded, data, func(d []byte) ([]*Task, error) {
+					if len(d) == 0 {
+						// Empty file/data -> empty slice or error depending on unmarshal implementation
+						return nil, fmt.Errorf("empty data")
+					}
+					var items []*Task
+					if err := json.Unmarshal(d, &items); err != nil {
+						return nil, err
+					}
+					return items, nil
+				})
+
+				if err == nil {
+					t.Errorf("Expected error when unmarshaling empty file data, got nil")
+				}
+			})
+
+			// Scenario 4: Series of test tasks - order and presence check after export and import
+			t.Run("SeriesOfTasksOrderAndPresence", func(t *testing.T) {
+				os.Remove(tmpFileName)
+				q := newQueue()
+
+				tasks := []*Task{
+					{ID: 101, Data: "Alpha"},
+					{ID: 102, Data: "Beta"},
+					{ID: 103, Data: "Gamma"},
+					{ID: 104, Data: "Delta"},
+				}
+
+				for _, task := range tasks {
+					q.Push(task)
+				}
+
+				if q.Len() != len(tasks) {
+					t.Fatalf("Expected queue length %d, got %d", len(tasks), q.Len())
+				}
+
+				// Export queue using example client pattern
+				queueBytes, err := Export(q, func(items []*Task) ([]byte, error) {
+					return json.Marshal(items)
+				})
+				if err != nil {
+					t.Fatalf("Failed to export queue: %v", err)
+				}
+
+				// Verify original queue is emptied after Export (since Export pops items)
+				if q.Len() != 0 {
+					t.Errorf("Expected original queue to be empty after Export, got length %d", q.Len())
+				}
+
+				// Save to file
+				if err := os.WriteFile(tmpFileName, queueBytes, 0644); err != nil {
+					t.Fatalf("Failed to save queue bytes to file: %v", err)
+				}
+
+				// Load from file into a new queue
+				fileData, err := os.ReadFile(tmpFileName)
+				if err != nil {
+					t.Fatalf("Failed to read saved state file: %v", err)
+				}
+
+				qImported := newQueue()
+				err = Import(qImported, fileData, func(d []byte) ([]*Task, error) {
+					var items []*Task
+					if err := json.Unmarshal(d, &items); err != nil {
+						return nil, err
+					}
+					return items, nil
+				})
+				if err != nil {
+					t.Fatalf("Failed to import queue from file data: %v", err)
+				}
+
+				if qImported.Len() != len(tasks) {
+					t.Fatalf("Expected imported queue length %d, got %d", len(tasks), qImported.Len())
+				}
+
+				// Check exact order and values (FIFO)
+				for i, expectedTask := range tasks {
+					popped, ok := qImported.Pop()
+					if !ok {
+						t.Fatalf("Failed to pop item at index %d", i)
+					}
+					if popped.ID != expectedTask.ID || popped.Data != expectedTask.Data {
+						t.Errorf("At index %d: got task ID=%d Data=%s, expected ID=%d Data=%s",
+							i, popped.ID, popped.Data, expectedTask.ID, expectedTask.Data)
+					}
+				}
+
+				if qImported.Len() != 0 {
+					t.Errorf("Expected imported queue to be empty after popping all tasks, got %d", qImported.Len())
+				}
+			})
+
+			// Scenario 5: Corrupted JSON / invalid data handling
+			t.Run("CorruptedDataImport", func(t *testing.T) {
+				corruptedData := []byte("{invalid-json-content}")
+				qLoaded := newQueue()
+
+				err := Import(qLoaded, corruptedData, func(d []byte) ([]*Task, error) {
+					var items []*Task
+					if err := json.Unmarshal(d, &items); err != nil {
+						return nil, err
+					}
+					return items, nil
+				})
+
+				if err == nil {
+					t.Errorf("Expected error when importing corrupted JSON data, got nil")
+				}
+			})
+		})
+	}
+}
+
