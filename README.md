@@ -13,6 +13,8 @@ A high-performance, thread-safe concurrent queue library for Go pipelines, provi
 - **Pipeline Integration**: Seamlessly integrate into worker pipelines (`AddQueue`) using Go channels and context cancellation.
 - **Race-Detector Safe**: Fully stress-tested for concurrent producers and consumers.
 
+- **Queue Persistence (Export & Import)**: Functions to serialize and deserialize queue contents (e.g., to/from JSON or storage files) while preserving item ordering.
+
 ## Installation
 
 ```bash
@@ -58,6 +60,30 @@ func main() {
 	for task := range outChan {
 		fmt.Printf("Processed: %s\n", task.Data)
 	}
+}
+```
+
+## Export and Import (Persistence)
+
+You can persist queue states (for example, to save application state or backup tasks) using `Export` and `Import`:
+
+```go
+// Export queue items to bytes (e.g. JSON)
+queueBytes, err := queue.Export(q, func(items []Task) ([]byte, error) {
+    return json.Marshal(items)
+})
+if err == nil {
+    _ = os.WriteFile("queue_state.json", queueBytes, 0644)
+}
+
+// Import bytes back into a queue
+data, err := os.ReadFile("queue_state.json")
+if err == nil {
+    err = queue.Import(q, data, func(data []byte) ([]Task, error) {
+        var items []Task
+        err := json.Unmarshal(data, &items)
+        return items, err
+    })
 }
 ```
 
