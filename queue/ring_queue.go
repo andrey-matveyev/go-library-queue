@@ -83,8 +83,11 @@ func (q *RingQueue[T]) resize() {
 		newCap = oldCap + (oldCap+3*256)/4
 	}
 
+	//if newCap <= 0 {
+	//	newCap = oldCap + 1
+	//}
 	if newCap <= 0 {
-		newCap = oldCap + 1
+		panic("ring queue capacity overflow")
 	}
 
 	newItems := make([]T, newCap)
@@ -100,4 +103,3 @@ func (q *RingQueue[T]) resize() {
 func (q *RingQueue[T]) InnerChan() chan struct{} {
 	return q.innerChan
 }
-
