@@ -2,8 +2,6 @@
 
 A high-performance, thread-safe concurrent queue library for Go pipelines, providing both linked-list (`ListQueue`) and circular-buffer ring (`RingQueue`) implementations with generic support (`[T any]`).
 
-![design](https://github.com/andrey-matveyev/go-sample-queue/blob/master/design.png)
-
 ## Features
 
 - **Generic Support**: Works with any type (`[T any]`).
