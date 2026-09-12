@@ -9,16 +9,14 @@ var _ Queue[any] = (*ListQueue[any])(nil)
 
 // ListQueue implements a thread-safe FIFO queue backed by container/list.
 type ListQueue[T any] struct {
-	mtx       sync.Mutex
-	items     *list.List
-	innerChan chan struct{}
+	mtx   sync.Mutex
+	items *list.List
 }
 
 // NewListQueue creates and initializes a new instance of ListQueue.
 func NewListQueue[T any]() *ListQueue[T] {
 	return &ListQueue[T]{
-		items:     list.New(),
-		innerChan: make(chan struct{}, 1),
+		items: list.New(),
 	}
 }
 
@@ -28,11 +26,6 @@ func (q *ListQueue[T]) Push(task T) {
 	defer q.mtx.Unlock()
 
 	q.items.PushBack(task)
-
-	select {
-	case q.innerChan <- struct{}{}:
-	default:
-	}
 }
 
 // Pop removes and returns the task from the front of the list queue, along with a boolean indicating success.
@@ -56,9 +49,3 @@ func (q *ListQueue[T]) Len() int {
 	defer q.mtx.Unlock()
 	return q.items.Len()
 }
-
-// InnerChan returns the internal notification channel of the list queue.
-func (q *ListQueue[T]) InnerChan() chan struct{} {
-	return q.innerChan
-}
-

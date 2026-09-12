@@ -9,12 +9,11 @@ var _ Queue[any] = (*RingQueue[any])(nil)
 // Note: If the number of elements grows beyond the maximum capacity representable
 // by an integer (int overflow), a panic will occur.
 type RingQueue[T any] struct {
-	mtx       sync.Mutex
-	items     []T
-	head      int
-	tail      int
-	size      int
-	innerChan chan struct{}
+	mtx   sync.Mutex
+	items []T
+	head  int
+	tail  int
+	size  int
 }
 
 // NewRingQueue creates and initializes a new RingQueue with the specified initial capacity.
@@ -23,8 +22,7 @@ func NewRingQueue[T any](initialCapacity int) *RingQueue[T] {
 		initialCapacity = 8
 	}
 	return &RingQueue[T]{
-		items:     make([]T, initialCapacity),
-		innerChan: make(chan struct{}, 1), // Buffer of 1 protects Push from blocking
+		items: make([]T, initialCapacity),
 	}
 }
 
@@ -40,11 +38,6 @@ func (q *RingQueue[T]) Push(task T) {
 	q.items[q.tail] = task
 	q.tail = (q.tail + 1) % cap(q.items)
 	q.size++
-
-	select {
-	case q.innerChan <- struct{}{}:
-	default:
-	}
 }
 
 // Pop removes and returns the next task from the ring queue, along with a boolean indicating success.
@@ -100,9 +93,4 @@ func (q *RingQueue[T]) resize() {
 	q.items = newItems
 	q.head = 0
 	q.tail = oldCap
-}
-
-// InnerChan returns the internal notification channel of the ring queue.
-func (q *RingQueue[T]) InnerChan() chan struct{} {
-	return q.innerChan
 }

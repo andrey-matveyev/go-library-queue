@@ -13,19 +13,18 @@ type Queue[T any] interface {
 	Pop() (T, bool)
 	// Len returns the current number of elements in the queue.
 	Len() int
-	// InnerChan returns an internal channel used to signal outProcess of new items or closure.
-	InnerChan() chan struct{}
 }
 
 // AddQueue embeds the queue into a concurrent processing pipeline, reading tasks from
 // the input channel, storing them in the queue, and writing them out to the returned output channel.
 // It respects context cancellation for stopping the processing stages.
 func AddQueue[T any](ctx context.Context, queue Queue[T], inp chan T) (out chan T) {
-	go inpProcess(inp, queue)
-
 	out = make(chan T)
+	notify := make(chan struct{}, 1)
 
-	go outProcess(ctx, queue, out)
+	go inpProcess(inp, queue, notify)
+	go outProcess(ctx, queue, notify, out)
+
 	return out
 }
 
@@ -67,27 +66,27 @@ func Import[T any](queue Queue[T], data []byte, unmarshalFn func(data []byte) ([
 
 // inpProcess reads items from the input channel and pushes them into the queue,
 // notifying the inner channel on each push. It closes the inner channel when input is exhausted.
-func inpProcess[T any](inp chan T, q Queue[T]) {
+func inpProcess[T any](inp chan T, q Queue[T], notify chan struct{}) {
+	defer close(notify)
 	for value := range inp {
 		q.Push(value)
 
 		select {
-		case q.InnerChan() <- struct{}{}:
+		case notify <- struct{}{}:
 		default:
 		}
 	}
-	close(q.InnerChan())
 }
 
 // outProcess reads items from the queue and sends them to the output channel
 // when signaled by the inner channel. It stops when the context is cancelled or the inner channel closes.
-func outProcess[T any](ctx context.Context, q Queue[T], out chan T) {
+func outProcess[T any](ctx context.Context, q Queue[T], notify chan struct{}, out chan T) {
 	defer close(out)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case _, ok := <-q.InnerChan():
+		case _, ok := <-notify:
 			for {
 				task, hasTask := q.Pop()
 				if !hasTask {
@@ -105,4 +104,3 @@ func outProcess[T any](ctx context.Context, q Queue[T], out chan T) {
 		}
 	}
 }
-
