@@ -44,12 +44,6 @@ func benchmarkQueueFullDrain(b *testing.B, newQueue func() Queue[*Task], numTask
 		inp := make(chan *Task)
 		out := AddQueue(ctx, q, inp)
 
-		// Wake up outProcess / innerChan to start draining existing items
-		select {
-		case q.InnerChan() <- struct{}{}:
-		default:
-		}
-
 		close(inp)
 
 		for range out {

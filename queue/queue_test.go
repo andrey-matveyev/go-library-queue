@@ -21,12 +21,6 @@ func TestNewQueue(t *testing.T) {
 		if q == nil {
 			t.Errorf("NewListQueue returned nil, expected a pointer to queue")
 		}
-		if q.InnerChan() == nil {
-			t.Errorf("innerChan was not initialized")
-		}
-		if cap(q.InnerChan()) != 1 {
-			t.Errorf("innerChan capacity was %d, expected 1", cap(q.InnerChan()))
-		}
 		if q.Len() != 0 {
 			t.Errorf("queue was not empty, expected 0 elements")
 		}
@@ -36,12 +30,6 @@ func TestNewQueue(t *testing.T) {
 		q := NewRingQueue[*Task](8)
 		if q == nil {
 			t.Errorf("NewRingQueue returned nil, expected a pointer to queue")
-		}
-		if q.InnerChan() == nil {
-			t.Errorf("innerChan was not initialized")
-		}
-		if cap(q.InnerChan()) != 1 {
-			t.Errorf("innerChan capacity was %d, expected 1", cap(q.InnerChan()))
 		}
 		if q.Len() != 0 {
 			t.Errorf("queue was not empty, expected 0 elements")
@@ -107,7 +95,8 @@ func TestInpProcessBasicFlow(t *testing.T) {
 	for name, q := range queues {
 		t.Run(name, func(t *testing.T) {
 			inp := make(chan *Task, 5)
-			go inpProcess(inp, q)
+			notify := make(chan struct{}, 1)
+			go inpProcess(inp, q, notify)
 
 			for i := range 3 {
 				inp <- &Task{ID: i}
@@ -122,13 +111,13 @@ func TestInpProcessBasicFlow(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 
 			select {
-			case <-q.InnerChan():
+			case <-notify:
 			default:
 			}
 			select {
-			case _, ok := <-q.InnerChan():
+			case _, ok := <-notify:
 				if ok {
-					t.Errorf("innerChan was not closed by inpProcess")
+					t.Errorf("notify channel was not closed by inpProcess")
 				}
 			default:
 			}
@@ -149,7 +138,8 @@ func TestOutProcessBasicFlow(t *testing.T) {
 			defer cancel()
 
 			out := make(chan *Task)
-			go outProcess(ctx, q, out)
+			notify := make(chan struct{}, 1)
+			go outProcess(ctx, q, notify, out)
 
 			task1 := &Task{ID: 1}
 			task2 := &Task{ID: 2}
@@ -157,7 +147,7 @@ func TestOutProcessBasicFlow(t *testing.T) {
 			q.Push(task2)
 
 			select {
-			case q.InnerChan() <- struct{}{}:
+			case notify <- struct{}{}:
 			default:
 			}
 
@@ -265,18 +255,6 @@ func TestPipelineCancellation(t *testing.T) {
 			wg.Wait()
 			close(inp)
 			time.Sleep(10 * time.Millisecond)
-
-			select {
-			case <-q.InnerChan():
-			default:
-			}
-			select {
-			case _, ok := <-q.InnerChan():
-				if ok {
-					t.Errorf("innerChan was not closed")
-				}
-			default:
-			}
 		})
 	}
 }
@@ -319,18 +297,6 @@ func TestSlowConsumerFastProducer(t *testing.T) {
 
 			if receivedCount != numTasks {
 				t.Errorf("Expected %d tasks, got %d", numTasks, receivedCount)
-			}
-
-			select {
-			case <-q.InnerChan():
-			default:
-			}
-			select {
-			case _, ok := <-q.InnerChan():
-				if ok {
-					t.Errorf("innerChan was not closed after all tasks processed")
-				}
-			default:
 			}
 		})
 	}
