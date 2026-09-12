@@ -5,6 +5,9 @@ import "sync"
 var _ Queue[any] = (*RingQueue[any])(nil)
 
 // RingQueue implements a thread-safe high-performance ring buffer (circular queue).
+//
+// Note: If the number of elements grows beyond the maximum capacity representable
+// by an integer (int overflow), a panic will occur.
 type RingQueue[T any] struct {
 	mtx       sync.Mutex
 	items     []T
