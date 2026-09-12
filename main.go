@@ -55,7 +55,7 @@ func main() {
 		fmt.Printf("Consumer: All tasks processed, output channel closed. (%dms)\n", time.Since(startTime).Milliseconds())
 	}()
 	// The pipeline will finish when inpChan closes -> inpProcess finishes ->
-	// queue.innerChan closes -> outProcess finishes -> outChan closes.
+	// notification closes -> outProcess finishes -> outChan closes.
 
 	/*
 	    // Uncomment this code to see how context manages the operation's lifecycle.
