@@ -173,18 +173,20 @@ func TestOutProcessBasicFlow(t *testing.T) {
 }
 
 func TestAddQueuePipeline(t *testing.T) {
-	queues := map[string]func() Queue[*Task]{
-		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
-		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	queues := map[string]func() (Queue[*Task], Option){
+		"ListQueue": func() (Queue[*Task], Option) { return NewListQueue[*Task](), WithList() },
+		"RingQueue": func() (Queue[*Task], Option) { return NewRingQueue[*Task](8), WithRing() },
 	}
 
-	for name, newQ := range queues {
+	for name, factory := range queues {
 		t.Run(name, func(t *testing.T) {
 			inp := make(chan *Task, 10)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			out := AddQueue(ctx, newQ(), inp)
+			qInstance, opt := factory()
+			out, _ := AddQueue(ctx, inp, opt)
+			_ = qInstance
 
 			expectedTasks := 5
 			go func() {
@@ -212,18 +214,18 @@ func TestAddQueuePipeline(t *testing.T) {
 }
 
 func TestPipelineCancellation(t *testing.T) {
-	queues := map[string]func() Queue[*Task]{
-		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
-		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	queues := map[string]func() (Queue[*Task], Option){
+		"ListQueue": func() (Queue[*Task], Option) { return NewListQueue[*Task](), WithList() },
+		"RingQueue": func() (Queue[*Task], Option) { return NewRingQueue[*Task](8), WithRing() },
 	}
 
-	for name, newQ := range queues {
+	for name, factory := range queues {
 		t.Run(name, func(t *testing.T) {
 			inp := make(chan *Task, 10)
 			ctx, cancel := context.WithCancel(context.Background())
 
-			q := newQ()
-			out := AddQueue(ctx, q, inp)
+			qInstance, opt := factory()
+			out, q := AddQueue(ctx, inp, opt)
 
 			var wg sync.WaitGroup
 			wg.Add(1)
@@ -250,6 +252,7 @@ func TestPipelineCancellation(t *testing.T) {
 			inp <- &Task{ID: 999}
 			time.Sleep(10 * time.Millisecond)
 			if q.Len() == 0 {
+				_ = qInstance
 				t.Errorf("Expected some tasks to remain in queue after cancellation, got 0")
 			}
 			wg.Wait()
@@ -260,19 +263,19 @@ func TestPipelineCancellation(t *testing.T) {
 }
 
 func TestSlowConsumerFastProducer(t *testing.T) {
-	queues := map[string]func() Queue[*Task]{
-		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
-		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+	queues := map[string]func() (Queue[*Task], Option){
+		"ListQueue": func() (Queue[*Task], Option) { return NewListQueue[*Task](), WithList() },
+		"RingQueue": func() (Queue[*Task], Option) { return NewRingQueue[*Task](8), WithRing() },
 	}
 
-	for name, newQ := range queues {
+	for name, factory := range queues {
 		t.Run(name, func(t *testing.T) {
 			inp := make(chan *Task, 100)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			q := newQ()
-			out := AddQueue(ctx, q, inp)
+			_, opt := factory()
+			out, _ := AddQueue(ctx, inp, opt)
 
 			numTasks := 20
 			var wg sync.WaitGroup
