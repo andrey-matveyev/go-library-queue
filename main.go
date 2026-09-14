@@ -24,7 +24,7 @@ func main() {
 
 	// 2. Embed our queue into the pipeline:
 	// This stage simulates some processing and includes the queue.
-	outChan := queue.AddQueue(mainCtx, queue.NewListQueue[Task](), inpChan)
+	outChan, _ := queue.AddQueue(mainCtx, inpChan, queue.WithUnsafeRing())
 
 	// 3. Start a producer goroutine:
 	// It will generate tasks and send them to inpChan.

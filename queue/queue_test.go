@@ -96,7 +96,7 @@ func TestInpProcessBasicFlow(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			inp := make(chan *Task, 5)
 			notify := make(chan struct{}, 1)
-			go inpProcess(inp, q, notify)
+			go reader(inp, q, notify)
 
 			for i := range 3 {
 				inp <- &Task{ID: i}
@@ -139,7 +139,7 @@ func TestOutProcessBasicFlow(t *testing.T) {
 
 			out := make(chan *Task)
 			notify := make(chan struct{}, 1)
-			go outProcess(ctx, q, notify, out)
+			go writer(ctx, q, notify, out)
 
 			task1 := &Task{ID: 1}
 			task2 := &Task{ID: 2}
@@ -587,4 +587,3 @@ func TestExportAndImportWithFileStorage(t *testing.T) {
 		})
 	}
 }
-
