@@ -28,6 +28,29 @@ func benchmarkQueuePipelineUnbuffered(b *testing.B, opt Option, numTasks int) {
 	}
 }
 
+// BenchmarkQueuePipelineUnsafeBuffered input channel with capacity 1 and buffered output channel
+func benchmarkQueuePipelineUnsafeBuffered(b *testing.B, opt Option, numTasks int) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		inp := make(chan *Task, 1) // Buffered input channel with capacity 1
+		out, _ := AddQueue(ctx, inp, opt)
+
+		go func() {
+			defer close(inp)
+			for j := 0; j < numTasks; j++ {
+				inp <- &Task{ID: j, Data: "benchmark task"}
+			}
+		}()
+
+		for range out {
+		}
+		cancel()
+	}
+}
+
+
+
 // BenchmarkQueueFullDrain extreme scenario: queue is fully filled first, then fully drained
 func benchmarkQueueFullDrain(b *testing.B, createQueue func() Queue[*Task], numTasks int) {
 	b.ReportAllocs()
@@ -108,27 +131,27 @@ func BenchmarkRingQueue_100k_FullDrain(b *testing.B) {
 
 // Unsafe stream benchmarks & additional tests
 func BenchmarkUnsafeListQueue_1k_Unbuffered(b *testing.B) {
-	benchmarkQueuePipelineUnbuffered(b, WithUnsafeList(), 1000)
+	benchmarkQueuePipelineUnsafeBuffered(b, WithUnsafeList(), 1000)
 }
 
 func BenchmarkUnsafeRingQueue_1k_Unbuffered(b *testing.B) {
-	benchmarkQueuePipelineUnbuffered(b, WithUnsafeRing(), 1000)
+	benchmarkQueuePipelineUnsafeBuffered(b, WithUnsafeRing(), 1000)
 }
 
 func BenchmarkUnsafeListQueue_10k_Unbuffered(b *testing.B) {
-	benchmarkQueuePipelineUnbuffered(b, WithUnsafeList(), 10000)
+	benchmarkQueuePipelineUnsafeBuffered(b, WithUnsafeList(), 10000)
 }
 
 func BenchmarkUnsafeRingQueue_10k_Unbuffered(b *testing.B) {
-	benchmarkQueuePipelineUnbuffered(b, WithUnsafeRing(), 10000)
+	benchmarkQueuePipelineUnsafeBuffered(b, WithUnsafeRing(), 10000)
 }
 
 func BenchmarkUnsafeListQueue_100k_Unbuffered(b *testing.B) {
-	benchmarkQueuePipelineUnbuffered(b, WithUnsafeList(), 100000)
+	benchmarkQueuePipelineUnsafeBuffered(b, WithUnsafeList(), 100000)
 }
 
 func BenchmarkUnsafeRingQueue_100k_Unbuffered(b *testing.B) {
-	benchmarkQueuePipelineUnbuffered(b, WithUnsafeRing(), 100000)
+	benchmarkQueuePipelineUnsafeBuffered(b, WithUnsafeRing(), 100000)
 }
 
 // Full Drain benchmarks for Unsafe queues
