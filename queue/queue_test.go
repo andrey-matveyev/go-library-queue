@@ -346,6 +346,159 @@ func TestRingQueueResizeAndWrap(t *testing.T) {
 	}
 }
 
+func TestNewUnsafeQueue(t *testing.T) {
+	t.Run("UnsafeListQueue", func(t *testing.T) {
+		q := NewUnsafeListQueue[*Task]()
+		if q == nil {
+			t.Errorf("NewUnsafeListQueue returned nil, expected a pointer to queue")
+		}
+		if q.Len() != 0 {
+			t.Errorf("queue was not empty, expected 0 elements")
+		}
+	})
+
+	t.Run("UnsafeRingQueue", func(t *testing.T) {
+		q := NewUnsafeRingQueue[*Task](8)
+		if q == nil {
+			t.Errorf("NewUnsafeRingQueue returned nil, expected a pointer to queue")
+		}
+		if q.Len() != 0 {
+			t.Errorf("queue was not empty, expected 0 elements")
+		}
+	})
+}
+
+func TestUnsafeQueuePushPop(t *testing.T) {
+	queues := map[string]Queue[*Task]{
+		"UnsafeListQueue": NewUnsafeListQueue[*Task](),
+		"UnsafeRingQueue": NewUnsafeRingQueue[*Task](8),
+	}
+
+	for name, q := range queues {
+		t.Run(name, func(t *testing.T) {
+			task1 := &Task{ID: 1, Data: "Task 1"}
+			task2 := &Task{ID: 2, Data: "Task 2"}
+
+			if poppedTask, ok := q.Pop(); ok || poppedTask != nil {
+				t.Errorf("Pop from empty queue returned (%v, %v), expected (nil, false)", poppedTask, ok)
+			}
+
+			q.Push(task1)
+			if q.Len() != 1 {
+				t.Errorf("After push, queue length was %d, expected 1", q.Len())
+			}
+
+			poppedTask, ok := q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 1 {
+				t.Errorf("Pop returned (%v, %v), expected task1", poppedTask, ok)
+			}
+			if q.Len() != 0 {
+				t.Errorf("After pop, queue length was %d, expected 0", q.Len())
+			}
+
+			q.Push(task1)
+			q.Push(task2)
+			if q.Len() != 2 {
+				t.Errorf("After two pushes, queue length was %d, expected 2", q.Len())
+			}
+
+			poppedTask, ok = q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 1 {
+				t.Errorf("First pop returned (%v, %v), expected task1", poppedTask, ok)
+			}
+			poppedTask, ok = q.Pop()
+			if !ok || poppedTask == nil || poppedTask.ID != 2 {
+				t.Errorf("Second pop returned (%v, %v), expected task2", poppedTask, ok)
+			}
+			if q.Len() != 0 {
+				t.Errorf("After all pops, queue length was %d, expected 0", q.Len())
+			}
+		})
+	}
+}
+
+func TestAddUnsafeQueuePipeline(t *testing.T) {
+	queues := map[string]func() (Queue[*Task], Option){
+		"UnsafeListQueue": func() (Queue[*Task], Option) { return NewUnsafeListQueue[*Task](), WithUnsafeList() },
+		"UnsafeRingQueue": func() (Queue[*Task], Option) { return NewUnsafeRingQueue[*Task](8), WithUnsafeRing() },
+	}
+
+	for name, factory := range queues {
+		t.Run(name, func(t *testing.T) {
+			inp := make(chan *Task, 10)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			qInstance, opt := factory()
+			out, _ := AddQueue(ctx, inp, opt)
+			_ = qInstance
+
+			expectedTasks := 5
+			go func() {
+				for i := 1; i <= expectedTasks; i++ {
+					inp <- &Task{ID: i, Data: fmt.Sprintf("Task %d", i)}
+				}
+				close(inp)
+			}()
+
+			receivedTasks := 0
+			for task := range out {
+				receivedTasks++
+				if task.ID != receivedTasks {
+					t.Errorf("Expected task ID %d, got %d", receivedTasks, task.ID)
+				}
+			}
+
+			if receivedTasks != expectedTasks {
+				t.Errorf("Expected %d tasks, got %d", expectedTasks, receivedTasks)
+			}
+
+			time.Sleep(50 * time.Millisecond)
+		})
+	}
+}
+
+func TestUnsafeRingQueueResizeAndWrap(t *testing.T) {
+	q := NewUnsafeRingQueue[*Task](4)
+	// Push more than capacity (4) to trigger resize
+	for i := 1; i <= 10; i++ {
+		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
+	}
+
+	if q.Len() != 10 {
+		t.Errorf("Expected length 10 after resize, got %d", q.Len())
+	}
+
+	// Pop half and push more to test wrap around
+	for i := 1; i <= 5; i++ {
+		task, ok := q.Pop()
+		if !ok || task.ID != i {
+			t.Errorf("Pop %d failed: got (%v, %v)", i, task, ok)
+		}
+	}
+
+	for i := 11; i <= 15; i++ {
+		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
+	}
+
+	if q.Len() != 10 { // 5 remaining + 5 new
+		t.Errorf("Expected length 10 after wrap-around push, got %d", q.Len())
+	}
+
+	// Pop all remaining
+	expectedIDs := []int{6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+	for _, expectedID := range expectedIDs {
+		task, ok := q.Pop()
+		if !ok || task.ID != expectedID {
+			t.Errorf("Pop expected ID %d, got (%v, %v)", expectedID, task, ok)
+		}
+	}
+
+	if q.Len() != 0 {
+		t.Errorf("Expected length 0 at end, got %d", q.Len())
+	}
+}
+
 func TestConcurrentQueueStress(t *testing.T) {
 	queues := map[string]Queue[*Task]{
 		"ListQueue": NewListQueue[*Task](),
