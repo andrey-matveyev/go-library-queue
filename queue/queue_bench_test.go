@@ -49,6 +49,32 @@ func benchmarkQueuePipelineUnsafeBuffered(b *testing.B, opt Option, numTasks int
 	}
 }
 
+type TaskValue struct {
+	ID   int
+	Data [32]byte
+}
+
+func benchmarkQueuePipelineValue(b *testing.B, opt Option, numTasks int) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		inp := make(chan TaskValue, 1)
+		out, _ := AddQueue(ctx, inp, opt)
+
+		go func() {
+			defer close(inp)
+			for j := 0; j < numTasks; j++ {
+				inp <- TaskValue{ID: j, Data: [32]byte{1, 2, 3}}
+			}
+		}()
+
+		for range out {
+		}
+		cancel()
+	}
+}
+
+
 
 
 // BenchmarkQueueFullDrain extreme scenario: queue is fully filled first, then fully drained
@@ -180,3 +206,49 @@ func BenchmarkUnsafeRingQueue_100k_FullDrain(b *testing.B) {
 }
 
 
+
+
+// Value-based transfer benchmarks
+func BenchmarkListQueue_1k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithList(), 1000)
+}
+
+func BenchmarkRingQueue_1k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithRing(), 1000)
+}
+
+func BenchmarkUnsafeListQueue_1k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithUnsafeList(), 1000)
+}
+
+func BenchmarkUnsafeRingQueue_1k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithUnsafeRing(), 1000)
+}
+
+func BenchmarkListQueue_10k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithList(), 10000)
+}
+
+func BenchmarkUnsafeListQueue_10k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithUnsafeList(), 10000)
+}
+
+func BenchmarkUnsafeRingQueue_10k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithUnsafeRing(), 10000)
+}
+
+func BenchmarkListQueue_100k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithList(), 100000)
+}
+
+func BenchmarkRingQueue_100k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithRing(), 100000)
+}
+
+func BenchmarkUnsafeListQueue_100k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithUnsafeList(), 100000)
+}
+
+func BenchmarkUnsafeRingQueue_100k_Value(b *testing.B) {
+	benchmarkQueuePipelineValue(b, WithUnsafeRing(), 100000)
+}
