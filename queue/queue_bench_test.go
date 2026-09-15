@@ -5,7 +5,24 @@ import (
 	"testing"
 )
 
-// go test -bench=. -benchmem ./queue/
+/*
+   Справка по запуск бенчмарков:
+   
+   1. Запуск всех бенчмарков:
+      go test -bench=. -benchmem ./queue/
+
+   2. Запуск только стандартных (потокобезопасных) бенчмарков по ссылке:
+      go test -bench="^(BenchmarkListQueue|BenchmarkRingQueue)_" -benchmem -skip="(Value|FullDrain_Value)" ./queue/
+
+   3. Запуск только Unsafe-бенчмарков (с буферизацией входного и выходного каналов емкостью 1):
+      go test -bench=Unsafe -benchmem ./queue/
+
+   4. Запуск бенчмарков передачи данных по значению (Value):
+      go test -bench=Value -benchmem ./queue/
+
+   5. Запуск FullDrain бенчмарков по значению:
+      go test -bench=FullDrain_Value -benchmem ./queue/
+*/
 
 // BenchmarkQueuePipeline unbuffered input channel (pure queue + pipeline overhead)
 func benchmarkQueuePipelineUnbuffered(b *testing.B, opt Option, numTasks int) {
