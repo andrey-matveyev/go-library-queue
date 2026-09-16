@@ -30,11 +30,15 @@ func AddQueue[T any](ctx context.Context, inp <-chan T, opts ...option) (out cha
 	case typeUnsafeRing:
 		queue = newUnsafeRingQueue[T](cfg.initCap)
 	case typeRing:
-		queue = newUnsafeListQueue[T]()
-	case typeUnsafeList:
 		queue = newRingQueue[T](cfg.initCap)
+	case typeUnsafeList:
+		queue = newUnsafeListQueue[T]()
 	case typeList:
 		queue = newListQueue[T]()
+	}
+
+	if cfg.initDataHook != nil {
+		cfg.initDataHook(queue)
 	}
 
 	switch cfg.qType {
@@ -164,7 +168,7 @@ func Export[T any](queue Queue[T], marshalFn func(items []T) ([]byte, error)) ([
 
 // Import restores items into the queue by unmarshaling raw byte data using the provided
 // unmarshal function and pushing each item into the queue.
-func Import[T any](queue Queue[T], data []byte, unmarshalFn func(data []byte) ([]T, error)) error {
+func Import[T any](queue Queue[T], data []byte, unmarshalFn func(dt []byte) ([]T, error)) error {
 	tempSlice, err := unmarshalFn(data)
 	if err != nil {
 		return err
