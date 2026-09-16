@@ -7,7 +7,7 @@ import (
 
 /*
    Справка по запуск бенчмарков:
-   
+
    1. Запуск всех бенчмарков:
       go test -bench=. -benchmem ./queue/
 
@@ -25,7 +25,7 @@ import (
 */
 
 // BenchmarkQueuePipeline unbuffered input channel (pure queue + pipeline overhead)
-func benchmarkQueuePipelineUnbuffered(b *testing.B, opt Option, numTasks int) {
+func benchmarkQueuePipelineUnbuffered(b *testing.B, opt option, numTasks int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -46,7 +46,7 @@ func benchmarkQueuePipelineUnbuffered(b *testing.B, opt Option, numTasks int) {
 }
 
 // BenchmarkQueuePipelineUnsafeBuffered input channel with capacity 1 and buffered output channel
-func benchmarkQueuePipelineUnsafeBuffered(b *testing.B, opt Option, numTasks int) {
+func benchmarkQueuePipelineUnsafeBuffered(b *testing.B, opt option, numTasks int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -71,7 +71,7 @@ type TaskValue struct {
 	Data [32]byte
 }
 
-func benchmarkQueuePipelineValue(b *testing.B, opt Option, numTasks int) {
+func benchmarkQueuePipelineValue(b *testing.B, opt option, numTasks int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -91,7 +91,6 @@ func benchmarkQueuePipelineValue(b *testing.B, opt Option, numTasks int) {
 	}
 }
 
-
 func benchmarkQueueFullDrainValue(b *testing.B, createQueue func() Queue[TaskValue], numTasks int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -108,9 +107,6 @@ func benchmarkQueueFullDrainValue(b *testing.B, createQueue func() Queue[TaskVal
 		}
 	}
 }
-
-
-
 
 // BenchmarkQueueFullDrain extreme scenario: queue is fully filled first, then fully drained
 func benchmarkQueueFullDrain(b *testing.B, createQueue func() Queue[*Task], numTasks int) {
@@ -167,27 +163,27 @@ func BenchmarkRingQueue_100k_Unbuffered(b *testing.B) {
 
 // Full Drain benchmarks
 func BenchmarkListQueue_1k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewListQueue[*Task]() }, 1000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newListQueue[*Task]() }, 1000)
 }
 
 func BenchmarkRingQueue_1k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewRingQueue[*Task](1000) }, 1000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newRingQueue[*Task](1000) }, 1000)
 }
 
 func BenchmarkListQueue_10k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewListQueue[*Task]() }, 10000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newListQueue[*Task]() }, 10000)
 }
 
 func BenchmarkRingQueue_10k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewRingQueue[*Task](10000) }, 10000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newRingQueue[*Task](10000) }, 10000)
 }
 
 func BenchmarkListQueue_100k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewListQueue[*Task]() }, 100000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newListQueue[*Task]() }, 100000)
 }
 
 func BenchmarkRingQueue_100k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewRingQueue[*Task](100000) }, 100000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newRingQueue[*Task](100000) }, 100000)
 }
 
 // Unsafe stream benchmarks & additional tests
@@ -217,31 +213,28 @@ func BenchmarkUnsafeRingQueue_100k_Unbuffered(b *testing.B) {
 
 // Full Drain benchmarks for Unsafe queues
 func BenchmarkUnsafeListQueue_1k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewUnsafeListQueue[*Task]() }, 1000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newUnsafeListQueue[*Task]() }, 1000)
 }
 
 func BenchmarkUnsafeRingQueue_1k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewUnsafeRingQueue[*Task](1000) }, 1000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newUnsafeRingQueue[*Task](1000) }, 1000)
 }
 
 func BenchmarkUnsafeListQueue_10k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewUnsafeListQueue[*Task]() }, 10000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newUnsafeListQueue[*Task]() }, 10000)
 }
 
 func BenchmarkUnsafeRingQueue_10k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewUnsafeRingQueue[*Task](10000) }, 10000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newUnsafeRingQueue[*Task](10000) }, 10000)
 }
 
 func BenchmarkUnsafeListQueue_100k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewUnsafeListQueue[*Task]() }, 100000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newUnsafeListQueue[*Task]() }, 100000)
 }
 
 func BenchmarkUnsafeRingQueue_100k_FullDrain(b *testing.B) {
-	benchmarkQueueFullDrain(b, func() Queue[*Task] { return NewUnsafeRingQueue[*Task](100000) }, 100000)
+	benchmarkQueueFullDrain(b, func() Queue[*Task] { return newUnsafeRingQueue[*Task](100000) }, 100000)
 }
-
-
-
 
 // Value-based transfer benchmarks
 func BenchmarkListQueue_1k_Value(b *testing.B) {
@@ -290,50 +283,49 @@ func BenchmarkUnsafeRingQueue_100k_Value(b *testing.B) {
 
 // Value-based FullDrain benchmarks
 func BenchmarkListQueue_1k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewListQueue[TaskValue]() }, 1000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newListQueue[TaskValue]() }, 1000)
 }
 
 func BenchmarkRingQueue_1k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewRingQueue[TaskValue](1000) }, 1000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newRingQueue[TaskValue](1000) }, 1000)
 }
 
 func BenchmarkUnsafeListQueue_1k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewUnsafeListQueue[TaskValue]() }, 1000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newUnsafeListQueue[TaskValue]() }, 1000)
 }
 
 func BenchmarkUnsafeRingQueue_1k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewUnsafeRingQueue[TaskValue](1000) }, 1000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newUnsafeRingQueue[TaskValue](1000) }, 1000)
 }
 
 func BenchmarkListQueue_10k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewListQueue[TaskValue]() }, 10000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newListQueue[TaskValue]() }, 10000)
 }
 
 func BenchmarkRingQueue_10k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewRingQueue[TaskValue](10000) }, 10000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newRingQueue[TaskValue](10000) }, 10000)
 }
 
 func BenchmarkUnsafeListQueue_10k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewUnsafeListQueue[TaskValue]() }, 10000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newUnsafeListQueue[TaskValue]() }, 10000)
 }
 
 func BenchmarkUnsafeRingQueue_10k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewUnsafeRingQueue[TaskValue](10000) }, 10000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newUnsafeRingQueue[TaskValue](10000) }, 10000)
 }
 
 func BenchmarkListQueue_100k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewListQueue[TaskValue]() }, 100000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newListQueue[TaskValue]() }, 100000)
 }
 
 func BenchmarkRingQueue_100k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewRingQueue[TaskValue](100000) }, 100000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newRingQueue[TaskValue](100000) }, 100000)
 }
 
 func BenchmarkUnsafeListQueue_100k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewUnsafeListQueue[TaskValue]() }, 100000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newUnsafeListQueue[TaskValue]() }, 100000)
 }
 
 func BenchmarkUnsafeRingQueue_100k_FullDrain_Value(b *testing.B) {
-	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return NewUnsafeRingQueue[TaskValue](100000) }, 100000)
+	benchmarkQueueFullDrainValue(b, func() Queue[TaskValue] { return newUnsafeRingQueue[TaskValue](100000) }, 100000)
 }
-

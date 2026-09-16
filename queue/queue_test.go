@@ -17,7 +17,7 @@ type Task struct {
 
 func TestNewQueue(t *testing.T) {
 	t.Run("ListQueue", func(t *testing.T) {
-		q := NewListQueue[*Task]()
+		q := newListQueue[*Task]()
 		if q == nil {
 			t.Errorf("NewListQueue returned nil, expected a pointer to queue")
 		}
@@ -27,7 +27,7 @@ func TestNewQueue(t *testing.T) {
 	})
 
 	t.Run("RingQueue", func(t *testing.T) {
-		q := NewRingQueue[*Task](8)
+		q := newRingQueue[*Task](8)
 		if q == nil {
 			t.Errorf("NewRingQueue returned nil, expected a pointer to queue")
 		}
@@ -39,8 +39,8 @@ func TestNewQueue(t *testing.T) {
 
 func TestQueuePushPop(t *testing.T) {
 	queues := map[string]Queue[*Task]{
-		"ListQueue": NewListQueue[*Task](),
-		"RingQueue": NewRingQueue[*Task](8),
+		"ListQueue": newListQueue[*Task](),
+		"RingQueue": newRingQueue[*Task](8),
 	}
 
 	for name, q := range queues {
@@ -88,8 +88,8 @@ func TestQueuePushPop(t *testing.T) {
 
 func TestInpProcessBasicFlow(t *testing.T) {
 	queues := map[string]Queue[*Task]{
-		"ListQueue": NewListQueue[*Task](),
-		"RingQueue": NewRingQueue[*Task](8),
+		"ListQueue": newListQueue[*Task](),
+		"RingQueue": newRingQueue[*Task](8),
 	}
 
 	for name, q := range queues {
@@ -127,8 +127,8 @@ func TestInpProcessBasicFlow(t *testing.T) {
 
 func TestOutProcessBasicFlow(t *testing.T) {
 	queues := map[string]func() Queue[*Task]{
-		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
-		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+		"ListQueue": func() Queue[*Task] { return newListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return newRingQueue[*Task](8) },
 	}
 
 	for name, newQ := range queues {
@@ -173,9 +173,9 @@ func TestOutProcessBasicFlow(t *testing.T) {
 }
 
 func TestAddQueuePipeline(t *testing.T) {
-	queues := map[string]func() (Queue[*Task], Option){
-		"ListQueue": func() (Queue[*Task], Option) { return NewListQueue[*Task](), WithList() },
-		"RingQueue": func() (Queue[*Task], Option) { return NewRingQueue[*Task](8), WithRing() },
+	queues := map[string]func() (Queue[*Task], option){
+		"ListQueue": func() (Queue[*Task], option) { return newListQueue[*Task](), WithList() },
+		"RingQueue": func() (Queue[*Task], option) { return newRingQueue[*Task](8), WithRing() },
 	}
 
 	for name, factory := range queues {
@@ -214,9 +214,9 @@ func TestAddQueuePipeline(t *testing.T) {
 }
 
 func TestPipelineCancellation(t *testing.T) {
-	queues := map[string]func() (Queue[*Task], Option){
-		"ListQueue": func() (Queue[*Task], Option) { return NewListQueue[*Task](), WithList() },
-		"RingQueue": func() (Queue[*Task], Option) { return NewRingQueue[*Task](8), WithRing() },
+	queues := map[string]func() (Queue[*Task], option){
+		"ListQueue": func() (Queue[*Task], option) { return newListQueue[*Task](), WithList() },
+		"RingQueue": func() (Queue[*Task], option) { return newRingQueue[*Task](8), WithRing() },
 	}
 
 	for name, factory := range queues {
@@ -263,9 +263,9 @@ func TestPipelineCancellation(t *testing.T) {
 }
 
 func TestSlowConsumerFastProducer(t *testing.T) {
-	queues := map[string]func() (Queue[*Task], Option){
-		"ListQueue": func() (Queue[*Task], Option) { return NewListQueue[*Task](), WithList() },
-		"RingQueue": func() (Queue[*Task], Option) { return NewRingQueue[*Task](8), WithRing() },
+	queues := map[string]func() (Queue[*Task], option){
+		"ListQueue": func() (Queue[*Task], option) { return newListQueue[*Task](), WithList() },
+		"RingQueue": func() (Queue[*Task], option) { return newRingQueue[*Task](8), WithRing() },
 	}
 
 	for name, factory := range queues {
@@ -306,7 +306,7 @@ func TestSlowConsumerFastProducer(t *testing.T) {
 }
 
 func TestRingQueueResizeAndWrap(t *testing.T) {
-	q := NewRingQueue[*Task](4)
+	q := newRingQueue[*Task](4)
 	// Push more than capacity (4) to trigger resize
 	for i := 1; i <= 10; i++ {
 		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
@@ -348,7 +348,7 @@ func TestRingQueueResizeAndWrap(t *testing.T) {
 
 func TestNewUnsafeQueue(t *testing.T) {
 	t.Run("UnsafeListQueue", func(t *testing.T) {
-		q := NewUnsafeListQueue[*Task]()
+		q := newUnsafeListQueue[*Task]()
 		if q == nil {
 			t.Errorf("NewUnsafeListQueue returned nil, expected a pointer to queue")
 		}
@@ -358,7 +358,7 @@ func TestNewUnsafeQueue(t *testing.T) {
 	})
 
 	t.Run("UnsafeRingQueue", func(t *testing.T) {
-		q := NewUnsafeRingQueue[*Task](8)
+		q := newUnsafeRingQueue[*Task](8)
 		if q == nil {
 			t.Errorf("NewUnsafeRingQueue returned nil, expected a pointer to queue")
 		}
@@ -370,8 +370,8 @@ func TestNewUnsafeQueue(t *testing.T) {
 
 func TestUnsafeQueuePushPop(t *testing.T) {
 	queues := map[string]Queue[*Task]{
-		"UnsafeListQueue": NewUnsafeListQueue[*Task](),
-		"UnsafeRingQueue": NewUnsafeRingQueue[*Task](8),
+		"UnsafeListQueue": newUnsafeListQueue[*Task](),
+		"UnsafeRingQueue": newUnsafeRingQueue[*Task](8),
 	}
 
 	for name, q := range queues {
@@ -418,9 +418,9 @@ func TestUnsafeQueuePushPop(t *testing.T) {
 }
 
 func TestAddUnsafeQueuePipeline(t *testing.T) {
-	queues := map[string]func() (Queue[*Task], Option){
-		"UnsafeListQueue": func() (Queue[*Task], Option) { return NewUnsafeListQueue[*Task](), WithUnsafeList() },
-		"UnsafeRingQueue": func() (Queue[*Task], Option) { return NewUnsafeRingQueue[*Task](8), WithUnsafeRing() },
+	queues := map[string]func() (Queue[*Task], option){
+		"UnsafeListQueue": func() (Queue[*Task], option) { return newUnsafeListQueue[*Task](), WithUnsafeList() },
+		"UnsafeRingQueue": func() (Queue[*Task], option) { return newUnsafeRingQueue[*Task](8), WithUnsafeRing() },
 	}
 
 	for name, factory := range queues {
@@ -459,7 +459,7 @@ func TestAddUnsafeQueuePipeline(t *testing.T) {
 }
 
 func TestUnsafeRingQueueResizeAndWrap(t *testing.T) {
-	q := NewUnsafeRingQueue[*Task](4)
+	q := newUnsafeRingQueue[*Task](4)
 	// Push more than capacity (4) to trigger resize
 	for i := 1; i <= 10; i++ {
 		q.Push(&Task{ID: i, Data: fmt.Sprintf("Task %d", i)})
@@ -501,8 +501,8 @@ func TestUnsafeRingQueueResizeAndWrap(t *testing.T) {
 
 func TestConcurrentQueueStress(t *testing.T) {
 	queues := map[string]Queue[*Task]{
-		"ListQueue": NewListQueue[*Task](),
-		"RingQueue": NewRingQueue[*Task](4),
+		"ListQueue": newListQueue[*Task](),
+		"RingQueue": newRingQueue[*Task](4),
 	}
 
 	for name, q := range queues {
@@ -560,8 +560,8 @@ func TestConcurrentQueueStress(t *testing.T) {
 
 func TestExportAndImportWithFileStorage(t *testing.T) {
 	queues := map[string]func() Queue[*Task]{
-		"ListQueue": func() Queue[*Task] { return NewListQueue[*Task]() },
-		"RingQueue": func() Queue[*Task] { return NewRingQueue[*Task](8) },
+		"ListQueue": func() Queue[*Task] { return newListQueue[*Task]() },
+		"RingQueue": func() Queue[*Task] { return newRingQueue[*Task](8) },
 	}
 
 	tmpFileName := "test_queue_state.json"

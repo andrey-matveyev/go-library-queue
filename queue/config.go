@@ -14,7 +14,7 @@ type config struct {
 	initCap int
 }
 
-type Option func(*config)
+type option func(*config)
 
 // конструктор дефолтных настроек
 func defaultConfig() config {
@@ -24,31 +24,31 @@ func defaultConfig() config {
 	}
 }
 
-func WithCapacity(capacity int) Option {
+func WithCapacity(capacity int) option {
 	return func(c *config) {
 		c.initCap = capacity
 	}
 }
 
-func WithRing() Option {
+func WithRing() option {
 	return func(c *config) {
 		c.qType = typeRing
 	}
 }
 
-func WithList() Option {
+func WithList() option {
 	return func(c *config) {
 		c.qType = typeList
 	}
 }
 
-func WithUnsafeRing() Option {
+func WithUnsafeRing() option {
 	return func(c *config) {
 		c.qType = typeUnsafeRing
 	}
 }
 
-func WithUnsafeList() Option {
+func WithUnsafeList() option {
 	return func(c *config) {
 		c.qType = typeUnsafeList
 	}

@@ -7,7 +7,7 @@ import (
 // Queue defines a thread-safe generic queue interface that supports concurrent
 // pushing, popping, length inspection, and notification signaling via a channel.
 type Queue[T any] interface {
-	// Push adds a new task to the queue.
+	// push adds a new task to the queue.
 	Push(task T)
 	// Pop removes and returns the next task from the queue along with a boolean indicating success.
 	Pop() (T, bool)
@@ -20,43 +20,29 @@ type Queue[T any] interface {
 // AddQueue embeds the queue into a concurrent processing pipeline, reading tasks from
 // the input channel, storing them in the queue, and writing them out to the returned output channel.
 // It respects context cancellation for stopping the processing stages.
-func AddQueue[T any](ctx context.Context, inp <-chan T, opts ...Option) (out chan T, queue Queue[T]) {
+func AddQueue[T any](ctx context.Context, inp <-chan T, opts ...option) (out chan T, queue Queue[T]) {
 	cfg := defaultConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
-	// 1. Создаем внутреннюю "сырую" очередь ДЛЯ ГОРУТИНЫ
-	var unsafeQueue Queue[T]
-
-	switch cfg.qType {
-	case typeUnsafeRing, typeRing:
-		unsafeQueue = NewUnsafeRingQueue[T](cfg.initCap)
-	case typeUnsafeList, typeList:
-		unsafeQueue = NewUnsafeListQueue[T]()
-	}
-	// 2. Для возврата наружу МЫ ВСЕГДА оборачиваем её в потокобезопасный слой!
-	// Даже если стример работает в один поток, внешние вызовы Export/Import будут защищены мьютексом.
 	switch cfg.qType {
 	case typeUnsafeRing:
-		queue = &RingQueue[T]{muQ: unsafeQueue.(*UnsafeRingQueue[T])}
+		queue = newUnsafeRingQueue[T](cfg.initCap)
 	case typeRing:
-		queue = &RingQueue[T]{muQ: unsafeQueue.(*UnsafeRingQueue[T])}
+		queue = newUnsafeListQueue[T]()
 	case typeUnsafeList:
-		queue = &ListQueue[T]{muQ: unsafeQueue.(*UnsafeListQueue[T])}
+		queue = newRingQueue[T](cfg.initCap)
 	case typeList:
-		queue = &ListQueue[T]{muQ: unsafeQueue.(*UnsafeListQueue[T])}
+		queue = newListQueue[T]()
 	}
 
-	// 3. Запуск процессов
 	switch cfg.qType {
 	case typeUnsafeRing, typeUnsafeList:
 		out = make(chan T, 1)
-		// В streamer отдаем unsafeQueue (ему мьютексы не нужны, он один)
-		go streamer(ctx, inp, unsafeQueue, out)
+		go streamer(ctx, inp, queue, out)
 	case typeRing, typeList:
 		out = make(chan T)
-		// В reader/writer отдаем безопасную queue (так как там конкуренция между ними)
 		notify := make(chan struct{}, 1)
 		go reader(inp, queue, notify)
 		go writer(ctx, queue, notify, out)
@@ -89,12 +75,13 @@ func writer[T any](ctx context.Context, q Queue[T], notify chan struct{}, out ch
 			return
 		case _, ok := <-notify:
 			for {
-				task, hasTask := q.Pop()
+				task, hasTask := q.Peek()
 				if !hasTask {
 					break
 				}
 				select {
 				case out <- task:
+					q.Pop()
 				case <-ctx.Done():
 					return
 				}
