@@ -7,7 +7,7 @@ var (
 	_ Queue[any] = (*unsafeRingQueue[any])(nil)
 )
 
-// ListQueue implements a thread-safe FIFO queue backed by container/list.
+// ringQueue implements a thread-safe generic ring buffer.
 type ringQueue[T any] struct {
 	mtx sync.Mutex
 	muQ Queue[T]

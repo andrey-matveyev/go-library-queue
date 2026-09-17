@@ -37,10 +37,6 @@ func AddQueue[T any](ctx context.Context, inp <-chan T, opts ...option) (out cha
 		queue = newListQueue[T]()
 	}
 
-	if cfg.initDataHook != nil {
-		cfg.initDataHook(queue)
-	}
-
 	switch cfg.qType {
 	case typeUnsafeRing, typeUnsafeList:
 		out = make(chan T, 1)
