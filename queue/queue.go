@@ -5,15 +5,15 @@ import (
 )
 
 // Queue defines a thread-safe generic queue interface that supports concurrent
-// pushing, popping, length inspection, and notification signaling via a channel.
+// pushing, popping, peeking, length inspection, and task management.
 type Queue[T any] interface {
-	// push adds a new task to the queue.
+	// Push adds a new task to the queue.
 	Push(task T)
 	// Pop removes and returns the next task from the queue along with a boolean indicating success.
 	Pop() (T, bool)
 	// Len returns the current number of elements in the queue.
 	Len() int
-
+	// Peek returns the next task from the queue without removing it, along with a boolean indicating success.
 	Peek() (T, bool)
 }
 
@@ -51,8 +51,8 @@ func AddQueue[T any](ctx context.Context, inp <-chan T, opts ...option) (out cha
 	return out, queue
 }
 
-// inpProcess reads items from the input channel and pushes them into the queue,
-// notifying the inner channel on each push. It closes the inner channel when input is exhausted.
+// reader reads items from the input channel and pushes them into the queue,
+// notifying the inner notification channel on each push. It closes the notification channel when input is exhausted.
 func reader[T any](inp <-chan T, q Queue[T], notify chan struct{}) {
 	defer close(notify)
 	for value := range inp {
@@ -65,8 +65,8 @@ func reader[T any](inp <-chan T, q Queue[T], notify chan struct{}) {
 	}
 }
 
-// outProcess reads items from the queue and sends them to the output channel
-// when signaled by the inner channel. It stops when the context is cancelled or the inner channel closes.
+// writer reads items from the queue and sends them to the output channel
+// when signaled by the notification channel. It stops when the context is cancelled or the notification channel closes.
 func writer[T any](ctx context.Context, q Queue[T], notify chan struct{}, out chan T) {
 	defer close(out)
 	for {
@@ -93,6 +93,8 @@ func writer[T any](ctx context.Context, q Queue[T], notify chan struct{}, out ch
 	}
 }
 
+// streamer manages high-performance non-thread-safe queues in a single goroutine,
+// dynamically multiplexing between reading from the input channel and writing the next queued task to the output channel.
 func streamer[T any](ctx context.Context, inp <-chan T, queue Queue[T], out chan T) {
 	defer close(out)
 
@@ -102,10 +104,12 @@ func streamer[T any](ctx context.Context, inp <-chan T, queue Queue[T], out chan
 	var ok bool
 
 	for {
+		// Terminate when input is fully exhausted and the queue is completely drained.
 		if activeInp == nil && queue.Len() == 0 {
 			return
 		}
 
+		// Dynamically enable output channel selection only when there are items available to send.
 		currentTask, ok = queue.Peek()
 		if ok {
 			activeOut = out
@@ -123,6 +127,7 @@ func streamer[T any](ctx context.Context, inp <-chan T, queue Queue[T], out chan
 				break
 			}
 
+			// Fast path: if queue is empty, attempt to send directly to output without intermediate storage.
 			if queue.Len() == 0 {
 				select {
 				case out <- task:
@@ -135,6 +140,7 @@ func streamer[T any](ctx context.Context, inp <-chan T, queue Queue[T], out chan
 			queue.Push(task)
 
 		case activeOut <- currentTask:
+			// Task successfully sent; remove it from the queue.
 			queue.Pop()
 		}
 
