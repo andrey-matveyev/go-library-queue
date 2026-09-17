@@ -6,21 +6,21 @@ import (
 )
 
 /*
-   Справка по запуск бенчмарков:
+   Benchmark execution guide:
 
-   1. Запуск всех бенчмарков:
+   1. Run all benchmarks:
       go test -bench=. -benchmem ./queue/
 
-   2. Запуск только стандартных (потокобезопасных) бенчмарков по ссылке:
+   2. Run standard (thread-safe) benchmarks only:
       go test -bench="^(BenchmarkListQueue|BenchmarkRingQueue)_" -benchmem -skip="(Value|FullDrain_Value)" ./queue/
 
-   3. Запуск только Unsafe-бенчмарков (с буферизацией входного и выходного каналов емкостью 1):
+   3. Run Unsafe benchmarks only (with input/output channels buffered with capacity 1):
       go test -bench=Unsafe -benchmem ./queue/
 
-   4. Запуск бенчмарков передачи данных по значению (Value):
+   4. Run value-based data transfer benchmarks:
       go test -bench=Value -benchmem ./queue/
 
-   5. Запуск FullDrain бенчмарков по значению:
+   5. Run value-based FullDrain benchmarks:
       go test -bench=FullDrain_Value -benchmem ./queue/
 */
 

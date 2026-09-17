@@ -131,7 +131,7 @@ func streamer[T any](ctx context.Context, inp <-chan T, queue Queue[T], out chan
 				}
 			}
 
-			// Если очередь была НЕ пуста ИЛИ out оказался занят:
+			// If the queue was not empty OR the output channel was blocked, push the task into the queue:
 			queue.Push(task)
 
 		case activeOut <- currentTask:
